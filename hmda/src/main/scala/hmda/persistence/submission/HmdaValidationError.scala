@@ -5,7 +5,7 @@ import java.time.Instant
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter._
-import akka.actor.typed.{ActorRef, ActorSystem, Behavior, TypedActorContext}
+import akka.actor.typed.{ActorRef, Behavior, TypedActorContext}
 import akka.actor.{Scheduler, ActorSystem => UntypedActorSystem}
 import akka.cluster.sharding.typed.ShardingEnvelope
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
@@ -20,7 +20,6 @@ import akka.stream.typed.scaladsl.ActorFlow
 import akka.util.{ByteString, Timeout}
 import akka.{Done, NotUsed}
 import com.typesafe.config.ConfigFactory
-import hmda.HmdaPlatform
 import hmda.HmdaPlatform.stringKafkaProducer
 import hmda.messages.institution.InstitutionCommands.{GetInstitution, ModifyInstitution}
 import hmda.messages.institution.InstitutionEvents.InstitutionEvent

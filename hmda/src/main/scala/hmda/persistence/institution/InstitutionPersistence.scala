@@ -6,7 +6,6 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter._
 import akka.actor.typed.{ActorRef, Behavior, TypedActorContext}
 import akka.cluster.sharding.typed.ShardingEnvelope
-import hmda.HmdaPlatform
 import hmda.HmdaPlatform.institutionKafkaProducer
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
 import akka.persistence.typed.PersistenceId
