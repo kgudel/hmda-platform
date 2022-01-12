@@ -3,5 +3,6 @@ kind: ConfigMap
 metadata:
   name: mlar-options-configmap
 data:
-  generateMlarS3File: false
-  createDispositionKafkaRecord: false
+  generateMlarS3File: "false"
+  createDispositionKafkaRecord: "false"
+  regenerateMlarData: "false"

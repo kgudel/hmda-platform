@@ -1,16 +1,23 @@
 package hmda.dataBrowser.services
 import akka.NotUsed
 import akka.stream.scaladsl.Source
+import cats.implicits._
 import hmda.dataBrowser.models._
-import hmda.dataBrowser.repositories.{ Cache, ModifiedLarRepository }
-import io.circe.Codec
+import hmda.dataBrowser.repositories._
 import monix.eval.Task
+import org.slf4j.Logger
 
-class DataBrowserQueryService(repo: ModifiedLarRepository, cache: Cache) extends QueryService {
+class DataBrowserQueryService(repoLatest: ModifiedLarRepositoryLatest, repo2017: ModifiedLarRepository2017, cache: Cache, log: Logger)
+    extends QueryService {
   override def fetchData(
-    queries: List[QueryField]
+    queryFields: QueryFields
   ): Source[ModifiedLarEntity, NotUsed] =
-    repo.find(queries)
+    repoLatest.find(queryFields.queryFields, queryFields.year.toInt)
+
+  override def fetchData2017(
+    queryFields: QueryFields
+  ): Source[ModifiedLarEntity2017, NotUsed] =
+    repo2017.find(queryFields.queryFields, queryFields.year.toInt)
 
   private def generateCombinations[T](x: List[List[T]]): List[List[T]] =
     x match {
@@ -29,18 +36,23 @@ class DataBrowserQueryService(repo: ModifiedLarRepository, cache: Cache) extends
     generateCombinations(singleElementBrowserFields)
   }
 
-  private def cacheResult[A: Codec](cacheLookup: Task[Option[A]], onMiss: Task[A], cacheUpdate: A => Task[A]): Task[A] =
+  private def cacheResult[A](cacheLookup: Task[Option[A]], onMiss: Task[A], cacheUpdate: A => Task[A]): Task[(ServedFrom, A)] =
     cacheLookup.flatMap {
       case None =>
-        onMiss.flatMap(cacheUpdate)
+        Task(log.debug("cache miss")) >> onMiss.flatMap(cacheUpdate).map(a => (ServedFrom.Database, a))
 
       case Some(a) =>
-        Task.now(a)
+        Task(log.debug("cache hit")) >> Task.now((ServedFrom.Cache, a))
     }
 
   override def fetchAggregate(
-    fields: List[QueryField]
-  ): Task[Seq[Aggregation]] = {
+    queryFields: QueryFields
+  ): Task[(ServedFrom, Seq[Aggregation])] = {
+    val repo = queryFields.year match {
+      case "2017" => repo2017
+      case _      => repoLatest
+    }
+    val fields = queryFields.queryFields
     val optState: Option[QueryField] =
       fields.filter(_.values.nonEmpty).find(_.name == "state")
     val optMsaMd: Option[QueryField] =
@@ -51,6 +63,8 @@ class DataBrowserQueryService(repo: ModifiedLarRepository, cache: Cache) extends
       fields.filter(_.values.nonEmpty).find(_.name == "year")
     val optLEI: Option[QueryField] =
       fields.filter(_.values.nonEmpty).find(_.name == "lei")
+    val optARID: Option[QueryField] =
+      fields.filter(_.values.nonEmpty).find(_.name == "arid")
 
     val rest = fields
       .filterNot(_.name == "state")
@@ -58,34 +72,50 @@ class DataBrowserQueryService(repo: ModifiedLarRepository, cache: Cache) extends
       .filterNot(_.name == "county")
       .filterNot(_.name == "year")
       .filterNot(_.name == "lei")
+      .filterNot(_.name == "arid")
 
     val queryFieldCombinations = permuteQueryFields(rest)
-      .map(
-        eachList => optYear.toList ++ optState.toList ++ optMsaMd.toList ++ optCounty.toList ++ optLEI.toList ++ eachList
+      .map(eachList =>
+        optYear.toList ++ optState.toList ++ optMsaMd.toList ++ optCounty.toList ++ optLEI.toList ++ optARID.toList ++ eachList
       )
       .map(eachCombination => eachCombination.sortBy(field => field.name))
 
-    Task.gatherUnordered {
+    Task.parSequenceUnordered {
       queryFieldCombinations.map { eachCombination =>
-        val fieldInfos = eachCombination.map(
-          field => FieldInfo(field.name, field.values.mkString(","))
-        )
+        val fieldInfos = eachCombination.map(field => FieldInfo(field.name, field.values.mkString(",")))
+
+        // the year is a special case as the data selected depends on the year
+        val year = eachCombination.find(_.name == "year").map(_.values.head).getOrElse(queryFields.year).toInt
+
         cacheResult(
-          cacheLookup = cache.find(eachCombination),
-          onMiss = repo.findAndAggregate(eachCombination),
-          cacheUpdate = cache.update(eachCombination, _: Statistic)
-        ).map(
-            statistic => Aggregation(statistic.count, statistic.sum, fieldInfos)
-          )
+          cacheLookup = cache.find(eachCombination, year),
+          onMiss = repo.findAndAggregate(eachCombination, year),
+          cacheUpdate = cache.update(eachCombination, year, _: Statistic)
+        ).map { case (from, statistic) => (from, Aggregation(statistic.count, statistic.sum, fieldInfos)) }
       }
-    }
+    }.map(results =>
+      results.foldLeft((ServedFrom.Cache: ServedFrom, List.empty[Aggregation])) {
+        case ((servedAcc, aggAcc), (nextServed, nextAgg)) =>
+          (servedAcc.combine(nextServed), nextAgg :: aggAcc)
+      }
+    )
   }
 
-  override def fetchFilers(fields: List[QueryField]): Task[FilerInstitutionResponse] = {
+  override def fetchFilers(queryFields: QueryFields): Task[(ServedFrom, FilerInstitutionResponseLatest)] = {
+    val fields = queryFields.queryFields
     cacheResult(
-      cacheLookup = cache.findFilers(fields),
-      onMiss = repo.findFilers(fields).map(FilerInstitutionResponse(_)),
-      cacheUpdate = cache.updateFilers(fields, _: FilerInstitutionResponse)
+      cacheLookup = cache.findFilers2018(fields, queryFields.year.toInt),
+      onMiss = repoLatest.findFilers(fields, queryFields.year.toInt).map(FilerInstitutionResponseLatest(_)),
+      cacheUpdate = cache.updateFilers2018(fields, queryFields.year.toInt, _: FilerInstitutionResponseLatest)
+    )
+  }
+
+  override def fetchFilers2017(queryFields: QueryFields): Task[(ServedFrom, FilerInstitutionResponse2017)] = {
+    val fields = queryFields.queryFields
+    cacheResult(
+      cacheLookup = cache.findFilers2017(fields, queryFields.year.toInt),
+      onMiss = repo2017.findFilers(fields, queryFields.year.toInt).map(FilerInstitutionResponse2017(_)),
+      cacheUpdate = cache.updateFilers2017(fields, queryFields.year.toInt, _: FilerInstitutionResponse2017)
     )
   }
 

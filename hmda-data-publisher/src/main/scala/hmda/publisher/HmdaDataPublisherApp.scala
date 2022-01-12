@@ -1,10 +1,19 @@
 package hmda.publisher
 
+import akka.actor.typed.scaladsl.adapter.ClassicActorSystemOps
 import akka.actor.{ActorSystem, Props}
-import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
+import hmda.publisher.api.HmdaDataPublisherApi
+import hmda.publisher.helper.PGTableNameLoader
+import hmda.publisher.qa.QAFilePersistor
 import hmda.publisher.scheduler._
+import hmda.publisher.util.{MattermostNotifier, PublishingReporter}
 import org.slf4j.LoggerFactory
-object HmdaDataPublisherApp extends App {
+
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.DurationInt
+
+// $COVERAGE-OFF$
+object HmdaDataPublisherApp extends App with PGTableNameLoader {
 
   val log = LoggerFactory.getLogger("hmda")
 
@@ -16,85 +25,48 @@ object HmdaDataPublisherApp extends App {
       ||  __  | |\/| | |  | |/ /\ \   | |  | |/ _` | __/ _` | |  ___/ | | | '_ \| | / __| '_ \ / _ \ '__|
       || |  | | |  | | |__| / ____ \  | |__| | (_| | || (_| | | |   | |_| | |_) | | \__ \ | | |  __/ |
       ||_|  |_|_|  |_|_____/_/    \_\ |_____/ \__,_|\__\__,_| |_|    \__,_|_.__/|_|_|___/_| |_|\___|_|                                             |___/
-    """.stripMargin)
+    """.stripMargin
+  )
 
-  val config = ConfigFactory.load()
+  implicit val actorSystem = ActorSystem("hmda-data-publisher")
+  implicit val ec: ExecutionContext = actorSystem.dispatcher
+  val config               = actorSystem.settings.config
 
-  val panelTimer2018 = config.getString("akka.PanelScheduler2018")
-  val larTimer2018 = config.getString("akka.LarScheduler2018")
-  val tsTimer2018 = config.getString("akka.TsScheduler2018")
+  log.info("Using LAR 2018 Table: " + lar2018TableName + "\n")
+  log.info("Using MLAR 2018 Table: " + mlar2018TableName + "\n")
+  log.info("Using PANEl 2018 Table: " + panel2018TableName + "\n")
+  log.info("Using TS 2018 Table: " + ts2018TableName + "\n")
+  log.info("Using LAR 2019 Table: " + lar2019TableName + "\n")
+  log.info("Using MLAR 2019 Table: " + mlar2019TableName + "\n")
+  log.info("Using PANEl 2019 Table: " + panel2019TableName + "\n")
+  log.info("Using TS 2019 Table: " + ts2019TableName + "\n")
+  log.info("Using LAR 2020 Table: " + lar2020TableName + "\n")
+  log.info("Using MLAR 2020 Table: " + mlar2020TableName + "\n")
+  log.info("Using PANEl 2020 Table: " + panel2020TableName + "\n")
+  log.info("Using PANEl 2021 Table: " + panel2021TableName + "\n")
+  log.info("Using TS 2020 Table: " + ts2020TableName + "\n")
+  log.info("Using LAR 2021 Table: " + lar2021TableName + "\n")
+  log.info("Using TS 2021 Table: " + ts2021TableName + "\n")
+  log.info("Using EMAIL Table: " + emailTableName + "\n")
 
-  val panelTimer2019 = config.getString("akka.PanelScheduler2019").split(",")
-  val larTimer2019 = config.getString("akka.LarScheduler2019").split(",")
-  val tsTimer2019 = config.getString("akka.TsScheduler2019").split(",")
+  config.getObject("akka.quartz.schedules").forEach((k, v) => log.info(s"$k = ${v.render()}"))
 
-  val larPublicTimer2018 = config.getString("akka.LarPublicScheduler2018")
-  val tsPublicTimer2018 = config.getString("akka.TsPublicScheduler2018")
+  val mattermostNotifier = new MattermostNotifier(config.getString("hmda.publisher.validation.reportingUrl"))
+  val publishingReporter = {
+    val groupReportingTimeout = 45.minutes // TODO move to config
+    actorSystem.spawn(PublishingReporter(mattermostNotifier, groupReportingTimeout), "PublishingReporter")
+  }
+  val qaFilePersistor = new QAFilePersistor(mattermostNotifier)
 
+  val allSchedulers = AllSchedulers(
+    larPublicScheduler = actorSystem.actorOf(Props(new LarPublicScheduler(publishingReporter, qaFilePersistor)), "LarPublicScheduler"),
+    larScheduler = actorSystem.actorOf(Props(new LarScheduler(publishingReporter, qaFilePersistor)), "LarScheduler"),
+    panelScheduler = actorSystem.actorOf(Props(new PanelScheduler(publishingReporter, qaFilePersistor)), "PanelScheduler"),
+    tsPublicScheduler = actorSystem.actorOf(Props(new TsPublicScheduler(publishingReporter, qaFilePersistor)), "TsPublicScheduler"),
+    tsScheduler = actorSystem.actorOf(Props(new TsScheduler(publishingReporter, qaFilePersistor)), "TsScheduler")
+  )
 
-  val larTimerQuarterly2020 = config.getString("akka.LarSchedulerQuarterly2020").split(",")
-  val tsTimerQuarterly2020 = config.getString("akka.TsSchedulerQuarterly2020").split(",")
-
-  log.info("Panel Timer 2018: " + panelTimer2018)
-  log.info("LAR Timer 2018: " + larTimer2018)
-  log.info("TS Timer 2018: " + tsTimer2018)
-
-  log.info("Panel Timer 2019: " + panelTimer2019)
-  log.info("LAR Timer 2019: " + larTimer2019)
-  log.info("TS Timer 2019: " + tsTimer2019)
-
-  log.info("LAR Public 2018: " + larPublicTimer2018)
-  log.info("TS Public 2018: " + tsPublicTimer2018)
-
-  log.info("LAR Quarterly 2020: " + larTimerQuarterly2020)
-  log.info("TS Quarterly 2020: " + tsTimerQuarterly2020)
-
-  val panelActorSystem =
-    ActorSystem(
-      "panelTask",
-      ConfigFactory
-        .parseString(panelTimer2018)
-        .withValue(panelTimer2019(0),
-                   ConfigValueFactory.fromAnyRef(panelTimer2019(1)))
-        .withFallback(config)
-    )
-  panelActorSystem.actorOf(Props[PanelScheduler], "PanelScheduler")
-
-  val larActorSystem =
-    ActorSystem("larTask",
-                ConfigFactory
-                  .parseString(larTimer2018)
-                  .withValue(larTimer2019(0),
-                             ConfigValueFactory.fromAnyRef(larTimer2019(1)))
-                  .withValue(larTimerQuarterly2020(0),
-                    ConfigValueFactory.fromAnyRef(larTimerQuarterly2020(1)))
-                  .withFallback(config))
-  larActorSystem.actorOf(Props[LarScheduler], "LarScheduler")
-
-  val tsActorSystem =
-    ActorSystem("tsTask",
-                ConfigFactory
-                  .parseString(tsTimer2018)
-                  .withValue(tsTimer2019(0),
-                             ConfigValueFactory.fromAnyRef(tsTimer2019(1)))
-                  .withValue(tsTimerQuarterly2020(0),
-                    ConfigValueFactory.fromAnyRef(tsTimerQuarterly2020(1)))
-                  .withFallback(config))
-  tsActorSystem.actorOf(Props[TsScheduler], "TsScheduler")
-
-
-  val larPublicActorSystem =
-    ActorSystem(
-      "larPublicTask",
-      ConfigFactory.parseString(larPublicTimer2018).withFallback(config))
-
-  larPublicActorSystem.actorOf(Props[LarPublicScheduler], "LarPublicScheduler")
-
-  val tsPublicActorSystem =
-    ActorSystem(
-      "tsPublicTask",
-      ConfigFactory.parseString(tsPublicTimer2018).withFallback(config))
-
-  tsPublicActorSystem.actorOf(Props[TsPublicScheduler], "TsPublicScheduler")
+  actorSystem.spawn[Nothing](HmdaDataPublisherApi(allSchedulers), HmdaDataPublisherApi.name)
 
 }
+// $COVERAGE-ON$

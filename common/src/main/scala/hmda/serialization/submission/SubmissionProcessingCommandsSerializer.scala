@@ -9,13 +9,14 @@ import akka.serialization.SerializerWithStringManifest
 import hmda.messages.submission.SubmissionProcessingCommands.{ CompleteSyntacticalValidity, GetHmdaValidationErrorState, _ }
 import hmda.persistence.serialization.submission.processing.commands._
 import hmda.serialization.submission.SubmissionProcessingCommandsProtobufConverter._
-
+// $COVERAGE-OFF$
 class SubmissionProcessingCommandsSerializer(system: ExtendedActorSystem) extends SerializerWithStringManifest {
 
   private val resolver = ActorRefResolver(system.toTyped)
 
   override def identifier: Int = 109
 
+  final val TrackProgressManifest  = classOf[TrackProgress].getName
   final val StartUploadManifest    = classOf[StartUpload].getName
   final val CompleteUploadManifest = classOf[CompleteUpload].getName
   final val StartParsingManifest   = classOf[StartParsing].getName
@@ -54,6 +55,8 @@ class SubmissionProcessingCommandsSerializer(system: ExtendedActorSystem) extend
 
   override def toBinary(o: AnyRef): Array[Byte] = o match {
 
+    case cmd: TrackProgress =>
+      trackProgressToProtobuf(cmd, resolver).toByteArray
     case cmd: StartUpload =>
       startUploadToProtobuf(cmd).toByteArray
     case cmd: CompleteUpload =>
@@ -100,6 +103,8 @@ class SubmissionProcessingCommandsSerializer(system: ExtendedActorSystem) extend
 
   override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
     manifest match {
+      case TrackProgressManifest =>
+        trackProgressFromProtobuf(TrackProgressMessage.parseFrom(bytes), resolver)
       case StartUploadManifest =>
         startUploadFromProtobuf(StartUploadMessage.parseFrom(bytes))
       case CompleteUploadManifest =>
@@ -144,3 +149,4 @@ class SubmissionProcessingCommandsSerializer(system: ExtendedActorSystem) extend
         throw new NotSerializableException(s"Unimplemented deserialization of message with manifest [$manifest] in [${getClass.getName}]")
     }
 }
+// $COVERAGE-ON$

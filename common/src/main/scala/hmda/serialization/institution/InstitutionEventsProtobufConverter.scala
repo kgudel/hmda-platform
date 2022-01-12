@@ -7,12 +7,13 @@ import hmda.persistence.serialization.institution.events.InstitutionKafkaEventMe
 import hmda.persistence.serialization.institution.events.InstitutionKafkaEventMessage.InstitutionEventField.{
   InstitutionCreatedField,
   InstitutionDeletedField,
-  InstitutionModifiedField
+  InstitutionModifiedField,
+  InstitutionWithLouField
 }
 import hmda.persistence.serialization.institution.events._
 import hmda.serialization.filing.FilingProtobufConverter._
 import hmda.serialization.institution.InstitutionProtobufConverter._
-
+// $COVERAGE-OFF$
 object InstitutionEventsProtobufConverter {
 
   def institutionCreatedToProtobuf(evt: InstitutionCreated): InstitutionCreatedMessage =
@@ -22,6 +23,16 @@ object InstitutionEventsProtobufConverter {
 
   def institutionCreatedFromProtobuf(msg: InstitutionCreatedMessage): InstitutionCreated =
     InstitutionCreated(
+      i = institutionFromProtobuf(msg.institution.getOrElse(InstitutionMessage()))
+    )
+
+  def institutionWithLouToProtobuf(evt: InstitutionWithLou): InstitutionWithLouMessage =
+    InstitutionWithLouMessage(
+      institution = Some(institutionToProtobuf(evt.i))
+    )
+
+  def institutionWithLouFromProtobuf(msg: InstitutionWithLouMessage): InstitutionWithLou =
+    InstitutionWithLou(
       i = institutionFromProtobuf(msg.institution.getOrElse(InstitutionMessage()))
     )
 
@@ -71,12 +82,18 @@ object InstitutionEventsProtobufConverter {
       case ic: InstitutionCreated =>
         val field = InstitutionCreatedField(institutionCreatedToProtobuf(ic))
         InstitutionKafkaEventMessage(evt.eventType, field)
+      case il: InstitutionWithLou =>
+        val field = InstitutionWithLouField(institutionWithLouToProtobuf(il))
+        InstitutionKafkaEventMessage(evt.eventType, field)
       case im: InstitutionModified =>
         val field = InstitutionModifiedField(institutionModifiedToProtobuf(im))
         InstitutionKafkaEventMessage(evt.eventType, field)
       case id: InstitutionDeleted =>
         val field = InstitutionDeletedField(institutionDeletedToProtobuf(id))
         InstitutionKafkaEventMessage(evt.eventType, field)
+
+      case other =>
+        sys.error(s"Unexpected $other when invoking institutionKafkaEventToProtobuf")
     }
 
   def institutionKafkaEventFromProtobuf(bytes: Array[Byte]): InstitutionKafkaEvent = {
@@ -84,11 +101,17 @@ object InstitutionEventsProtobufConverter {
     msg.institutionEventField match {
       case InstitutionEventField.InstitutionCreatedField(ic) =>
         InstitutionKafkaEvent(msg.eventType, institutionCreatedFromProtobuf(ic))
+      case InstitutionEventField.InstitutionWithLouField(ic) =>
+        InstitutionKafkaEvent(msg.eventType, institutionWithLouFromProtobuf(ic))
       case InstitutionEventField.InstitutionModifiedField(im) =>
         InstitutionKafkaEvent(msg.eventType, institutionModifiedFromProtobuf(im))
       case InstitutionEventField.InstitutionDeletedField(id) =>
         InstitutionKafkaEvent(msg.eventType, institutionDeletedFromProtobuf(id))
+
+      case other =>
+        sys.error(s"Unexpected $other when invoking institutionKafkaEventFromProtobuf")
     }
   }
 
 }
+// $COVERAGE-OFF$

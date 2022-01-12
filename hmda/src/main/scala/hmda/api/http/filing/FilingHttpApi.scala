@@ -2,42 +2,47 @@ package hmda.api.http.filing
 
 import java.time.Instant
 
-import akka.actor.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
-import akka.event.LoggingAdapter
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model.{StatusCodes, Uri}
-import akka.http.scaladsl.model.StatusCodes
-import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import akka.http.scaladsl.model.headers.RawHeader
-import hmda.api.http.directives.{CreateFilingAuthorization, HmdaTimeDirectives, QuarterlyFilingAuthorization}
+import akka.util.Timeout
 import ch.megard.akka.http.cors.scaladsl.CorsDirectives._
-import hmda.messages.filing.FilingCommands.{CreateFiling, GetFilingDetails}
-import hmda.model.filing.{Filing, FilingDetails, InProgress}
-import hmda.persistence.filing.FilingPersistence._
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
+import hmda.api.http.PathMatchers._
+import hmda.api.http.directives.CreateFilingAuthorization._
+import hmda.api.http.directives.QuarterlyFilingAuthorization.quarterlyFilingAllowed
 import hmda.api.http.model.ErrorResponse
+<<<<<<< HEAD
+=======
+import hmda.api.http.model.filing.submissions.FilingDetailsSummary
+>>>>>>> 3e4cb20acd8ab5379116e0f443a1885cafa7798f
 import hmda.auth.OAuth2Authorization
+import hmda.messages.filing.FilingCommands.{CreateFiling, GetFilingDetails}
 import hmda.messages.filing.FilingEvents.FilingCreated
 import hmda.messages.institution.InstitutionCommands.GetInstitution
+<<<<<<< HEAD
 import hmda.model.institution.Institution
+=======
+import hmda.model.filing.{Filing, FilingDetails, InProgress}
+import hmda.model.institution.Institution
+import hmda.persistence.filing.FilingPersistence._
+>>>>>>> 3e4cb20acd8ab5379116e0f443a1885cafa7798f
 import hmda.persistence.institution.InstitutionPersistence._
 import hmda.util.http.FilingResponseUtils._
-import hmda.api.http.PathMatchers._
+import org.slf4j.Logger
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-trait FilingHttpApi extends HmdaTimeDirectives with QuarterlyFilingAuthorization with CreateFilingAuthorization {
+object FilingHttpApi {
+  def create(log: Logger, sharding: ClusterSharding)(implicit ec: ExecutionContext, t: Timeout): OAuth2Authorization => Route =
+    new FilingHttpApi(log, sharding)(ec, t).filingRoutes _
+}
 
-  implicit val system: ActorSystem
-  implicit val materializer: ActorMaterializer
-  val log: LoggingAdapter
-  implicit val ec: ExecutionContext
-  implicit val timeout: Timeout
-  val sharding: ClusterSharding
+private class FilingHttpApi(log: Logger, sharding: ClusterSharding)(implicit val ec: ExecutionContext, t: Timeout) {
+  private val quarterlyFiler = quarterlyFilingAllowed(log, sharding) _
 
   def filingRoutes(oAuth2Authorization: OAuth2Authorization): Route =
     handleRejections(corsRejectionHandler) {
@@ -54,26 +59,26 @@ trait FilingHttpApi extends HmdaTimeDirectives with QuarterlyFilingAuthorization
         oAuth2Authorization.authorizeTokenWithLei(lei) { _ =>
           pathEndOrSingleSlash {
             // POST/institutions/<lei>/filings/<year>
-            timedPost { uri =>
+            (post & extractUri) { uri =>
               createFilingForInstitution(lei, year, None, uri)
             } ~
               // GET/institutions/<lei>/filings/<year>
-              timedGet { uri =>
-                getFilingForInstitution(lei, year, None, uri)
+              (get & extractUri) { uri =>
+                parameter('page.as[Int] ? 1)(pageNumber => getFilingForInstitution(lei, year, None, uri, pageNumber))
               }
           }
         }
       } ~ path("institutions" / Segment / "filings" / IntNumber / "quarter" / Quarter) { (lei, period, quarter) =>
         oAuth2Authorization.authorizeTokenWithLei(lei) { _ =>
           pathEndOrSingleSlash {
-            quarterlyFilingAllowed(lei, period) {
+            quarterlyFiler(lei, period) {
               // POST/institutions/<lei>/filings/<year>/quarters/<quarter>
-              timedPost { uri =>
+              (post & extractUri) { uri =>
                 createFilingForInstitution(lei, period, Option(quarter), uri)
               } ~
                 // GET /institutions/<lei>/filings/<year>/quarters/<quarter>
-                timedGet { uri =>
-                  getFilingForInstitution(lei, period, Option(quarter), uri)
+                (get & extractUri) { uri =>
+                  parameter('page.as[Int] ? 1)(pageNumber => getFilingForInstitution(lei, period, Option(quarter), uri, pageNumber))
                 }
             }
           }
@@ -85,15 +90,15 @@ trait FilingHttpApi extends HmdaTimeDirectives with QuarterlyFilingAuthorization
                            lei: String,
                            period: Int,
                            quarter: Option[String]
-  ): Future[(Option[Institution], Option[FilingDetails])] = {
+                         ): Future[(Option[Institution], Option[FilingDetails])] = {
     val ins = selectInstitution(sharding, lei, period)
     val fil = selectFiling(sharding, lei, period, quarter)
 
     val fInstitution: Future[Option[Institution]] = ins ? (ref => GetInstitution(ref))
-    val fEnriched: Future[Option[FilingDetails]] = fil ? (ref => GetFilingDetails(ref))
+    val fEnriched: Future[Option[FilingDetails]]  = fil ? (ref => GetFilingDetails(ref))
 
     for {
-      i: Option[Institution]           <- fInstitution
+      i: Option[Institution]   <- fInstitution
       d: Option[FilingDetails] <- fEnriched
     } yield (i, d)
   }
@@ -102,7 +107,7 @@ trait FilingHttpApi extends HmdaTimeDirectives with QuarterlyFilingAuthorization
     isFilingAllowed(year, quarter) {
       onComplete(obtainFilingDetails(lei, year, quarter)) {
         case Failure(error) =>
-          log.error(error, s"Unable to obtain filing details for an institution for (lei: $lei, year: $year, quarter: $quarter)")
+          log.error(s"Unable to obtain filing details for an institution for (lei: $lei, year: $year, quarter: $quarter)", error)
           failedResponse(StatusCodes.InternalServerError, uri, error)
 
         case Success((None, _)) =>
@@ -131,16 +136,41 @@ trait FilingHttpApi extends HmdaTimeDirectives with QuarterlyFilingAuthorization
               complete((StatusCodes.Created, filingDetails))
 
             case Failure(error) =>
-              log.error(error, s"Unable to create a filing for an institution for (lei: $lei, period: $period, quarter: $quarter)")
+              log.error(s"Unable to create a filing for an institution for (lei: $lei, period: $period, quarter: $quarter)", error)
               failedResponse(StatusCodes.InternalServerError, uri, error)
           }
       }
     }
 
-  def getFilingForInstitution(lei: String, period: Int, quarter: Option[String], uri: Uri): Route =
+  def getFilingForInstitution(lei: String, period: Int, quarter: Option[String], uri: Uri, pageNumber: Int): Route =
     onComplete(obtainFilingDetails(lei, period, quarter)) {
       case Success((Some(_), Some(filingDetails))) =>
-        complete(filingDetails)
+        val sortedDetails = filingDetails.copy(submissions = filingDetails.submissions.sortBy(- _.id.sequenceNumber))
+        // get all filings 
+        if (pageNumber == 0)
+          complete(sortedDetails)
+        else {
+          val summary =
+            FilingDetailsSummary(
+              filing = sortedDetails.filing,
+              submissions = Nil,
+              sortedDetails.submissions.length,
+              pageNumber,
+              uri.path.toString()
+            )
+          // Note that the current Pagination structure uses the pageNumber and configuration
+          // in order to compute the fromIndex (how many entries to skip)
+          // and count (how many entries to take)
+          // So we first put in empty data but the correct page number and total length
+          // in order to compute the correct fromIndex and correct count
+          // then we put the actual adjusted data in
+          val result = summary.copy(
+            submissions = sortedDetails.submissions
+              .drop(summary.fromIndex)
+              .take(summary.count)
+          )
+          complete(result)
+        }
 
       case Success((None, _)) =>
         entityNotPresentResponse("institution", lei, uri)
@@ -152,5 +182,4 @@ trait FilingHttpApi extends HmdaTimeDirectives with QuarterlyFilingAuthorization
       case Failure(error) =>
         failedResponse(StatusCodes.InternalServerError, uri, error)
     }
-
 }

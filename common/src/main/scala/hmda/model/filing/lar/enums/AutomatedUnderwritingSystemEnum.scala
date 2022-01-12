@@ -4,7 +4,7 @@ sealed trait AutomatedUnderwritingSystemEnum extends LarEnum
 
 object AutomatedUnderwritingSystemEnum
     extends LarCodeEnum[AutomatedUnderwritingSystemEnum] {
-  override val values = List(0, 1, 2, 3, 4, 5, 6, 1111)
+  override val values = List(0, 1, 2, 3, 4, 5, 6, 7, 1111)
 
   override def valueOf(code: Int): AutomatedUnderwritingSystemEnum =
     code match {
@@ -15,6 +15,7 @@ object AutomatedUnderwritingSystemEnum
       case 4    => GuaranteedUnderwritingSystem
       case 5    => OtherAUS
       case 6    => AUSNotApplicable
+      case 7    => InternalProprietarySystem
       case 1111 => AUSExempt
       case other    => new InvalidAutomatedUnderwritingSystemCode(other)
 
@@ -56,6 +57,11 @@ case object OtherAUS extends AutomatedUnderwritingSystemEnum {
 case object AUSNotApplicable extends AutomatedUnderwritingSystemEnum {
   override val code: Int           = 6
   override val description: String = "Not App"
+}
+
+case object InternalProprietarySystem extends AutomatedUnderwritingSystemEnum {
+  override val code: Int           = 7
+  override val description: String = "Internal Proprietary System"
 }
 
 case object AUSExempt extends AutomatedUnderwritingSystemEnum {

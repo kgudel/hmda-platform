@@ -1,16 +1,28 @@
 package hmda.dataBrowser.repositories
 
-import hmda.dataBrowser.models.{ FilerInstitutionResponse, QueryField, Statistic }
+import hmda.dataBrowser.models.{ FilerInstitutionResponse2017, FilerInstitutionResponseLatest, QueryField, QueryFields, Statistic }
 import monix.eval.Task
 
 trait Cache {
-  def find(queryFields: List[QueryField]): Task[Option[Statistic]]
+  def find(queryFields: List[QueryField], year: Int): Task[Option[Statistic]]
 
-  def findFilers(queryFields: List[QueryField]): Task[Option[FilerInstitutionResponse]]
+  def findFilers2018(queryFields: List[QueryField], year: Int): Task[Option[FilerInstitutionResponseLatest]]
 
-  def update(queryFields: List[QueryField], statistic: Statistic): Task[Statistic]
+  def findFilers2017(queryFields: List[QueryField], year: Int): Task[Option[FilerInstitutionResponse2017]]
 
-  def updateFilers(queryFields: List[QueryField], filerInstitutionResponse: FilerInstitutionResponse): Task[FilerInstitutionResponse]
+  def update(queryFields: List[QueryField], year: Int, statistic: Statistic): Task[Statistic]
 
-  def invalidate(queryField: List[QueryField]): Task[Unit]
+  def updateFilers2017(
+    queryFields: List[QueryField],
+    year: Int,
+    filerInstitutionResponse: FilerInstitutionResponse2017
+  ): Task[FilerInstitutionResponse2017]
+
+  def updateFilers2018(
+    queryFields: List[QueryField],
+    year: Int,
+    filerInstitutionResponse: FilerInstitutionResponseLatest
+  ): Task[FilerInstitutionResponseLatest]
+
+  def invalidate(queryField: List[QueryField], year: Int): Task[Unit]
 }

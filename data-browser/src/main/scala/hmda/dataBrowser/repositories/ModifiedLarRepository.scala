@@ -5,8 +5,12 @@ import akka.stream.scaladsl.Source
 import hmda.dataBrowser.models._
 import monix.eval.Task
 
-trait ModifiedLarRepository {
-  def find(browserFields: List[QueryField]): Source[ModifiedLarEntity, NotUsed]
-  def findAndAggregate(browserFields: List[QueryField]): Task[Statistic]
-  def findFilers(leiFields: List[QueryField]): Task[Seq[FilerInformation]]
+trait ModifiedLarRepository[A, B] {
+  def find(browserFields: List[QueryField], year: Int): Source[A, NotUsed]
+  def findAndAggregate(browserFields: List[QueryField], year: Int): Task[Statistic]
+  def findFilers(leiFields: List[QueryField], year: Int): Task[Seq[B]]
 }
+
+trait ModifiedLarRepository2017 extends ModifiedLarRepository[ModifiedLarEntity2017, FilerInformation2017]
+
+trait ModifiedLarRepositoryLatest extends ModifiedLarRepository[ModifiedLarEntity, FilerInformationLatest]

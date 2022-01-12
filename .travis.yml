@@ -6,25 +6,36 @@ cache:
     - $HOME/.sbt
     - $HOME/.ivy2
 
+env:
+  global:
+    - CASSANDRA_CLUSTER_HOSTS=localhost
+    - APP_PORT=2551
+
 language: scala
 
-scala: 2.12.7
+services:
+  - docker
+
+scala: 2.12.10
+
+install:
+  - nvm install node
+  - npm install newman
 
 jdk:
-- openjdk8
+- openjdk14
 
-before_install:
-  - . $HOME/.nvm/nvm.sh
-  - nvm install 8.9.4
-  - nvm use 8.9.4
-
-script: 
+script:
   - sbt ++$TRAVIS_SCALA_VERSION clean coverage test
   - sbt ++$TRAVIS_SCALA_VERSION coverageReport
   - sbt ++$TRAVIS_SCALA_VERSION coverageAggregate
-  
+  - sbt ++$TRAVIS_SCALA_VERSION -batch hmda-platform/docker:publishLocal
+
   # Trick to avoid unnecessary cache updates
   - find $HOME/.sbt -name "*.lock" | xargs rm
 
+  - ./run_travis.sh
+
 after_success:
   - bash <(curl -s https://codecov.io/bash)
+  - bash ./push_to_docker_hub.sh

@@ -14,11 +14,15 @@ message InstitutionMessage {
     repeated string emailDomains = 8;
     RespondentMessage respondent = 9;
     ParentMessage parent = 10;
-    int32 assets = 11;
+    int64 assets = 11;
     int32 otherLenderCode = 12;
     TopHolderMessage topHolder = 13;
     bool hmdaFilter = 14;
     bool quarterlyFiler = 15;
+    bool quarterlyFilerHasFiledQ1 = 16;
+    bool quarterlyFilerHasFiledQ2 = 17;
+    bool quarterlyFilerHasFiledQ3 = 18;
+    string notes = 19;
 }
 
 message RespondentMessage {

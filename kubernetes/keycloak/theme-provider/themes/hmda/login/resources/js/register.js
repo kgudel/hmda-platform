@@ -1,6 +1,8 @@
 /* eslint-env browser, jquery */
 /* global HMDA, initRules */
 !(function() {
+  var regButton = $('#kc-register')[0]
+
   //Given a list of institutions, create units of html for each of them
   function buildList(institutions) {
     $('#institutions')
@@ -95,6 +97,10 @@
       }
     })
     $('#user\\.attributes\\.lei').val(listOfInstitutions.join(','))
+
+    if(listOfInstitutions.length) regButton.removeAttribute('disabled')
+    else regButton.setAttribute('disabled', 'disabled')
+
   }
 
   //AJAX call to get data, calls buildList with returned institutions
@@ -111,7 +117,7 @@
                   "<span>Sorry, we couldn't find that email domain. For help getting registered, please fill out and submit </span>"
                 ),
                 getHelpFormLink(),
-                $('<span>.</span>')
+                $("<span>. You must use a financial institution's domain to register, personal email domains are not accepted.</span>")
               )
             )
         }

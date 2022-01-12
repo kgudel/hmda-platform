@@ -3,7 +3,7 @@ package hmda.publisher.query.panel
 case class InstitutionEntity(
     lei: String = "",
     activityYear: Int = 0,
-    agency: Int = -1,
+    agency: Int = 9,
     institutionType: Int = -1,
     id2017: String = "",
     taxId: String = "",
@@ -13,7 +13,7 @@ case class InstitutionEntity(
     respondentCity: String = "",
     parentIdRssd: Int = -1,
     parentName: String = "",
-    assets: Int = 0,
+    assets: Long = 0,
     otherLenderCode: Int = -1,
     topHolderIdRssd: Int = -1,
     topHolderName: String = "",

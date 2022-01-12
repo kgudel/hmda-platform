@@ -27,6 +27,26 @@ object ULI {
       calculateMod(convert(uli)) == 1
     }
 
+  def validateCheckDigitULI(uli: String): String = {
+    if (!isAlphanumeric(uli)) {
+      nonAlphanumericULIMessage
+    } else if (!uliIsValidLength(uli)) {
+      invalidULILengthMessage
+    } else {
+      (calculateMod(convert(uli)) == 1).toString
+    }
+  }
+
+
+  def validateULIViaEdits(uli: String): Boolean =
+    if (!isAlphanumeric(uli)) {
+      false
+    } else if (!uliIsValidLength(uli)) {
+      false
+    } else {
+      calculateMod(convert(uli)) == 1
+    }
+
   def isAlphanumeric(str: String): Boolean =
     str.forall(alphanumeric.contains(_))
 

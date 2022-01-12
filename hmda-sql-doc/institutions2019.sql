@@ -44,11 +44,22 @@ CREATE TABLE hmda_user.institutions2019 (
     topholder_id_rssd integer NOT NULL,
     topholder_name character varying NOT NULL,
     hmda_filer boolean NOT NULL,
-    quarterly_filer boolean default false NOT NULL
+    quarterly_filer boolean default false NOT NULL,
+    quarterly_filer_has_filed boolean default false NOT NULL
+
 );
 
+ALTER TABLE hmda_user.institutions2019
+    ADD COLUMN notes text not null default '';
+ALTER TABLE hmda_user.institutions2019
+    ALTER COLUMN notes DROP DEFAULT;
+ALTER TABLE hmda_user.institutions2019 ADD COLUMN created_at TIMESTAMP;
+ALTER TABLE hmda_user.institutions2019 ALTER COLUMN created_at SET DEFAULT now();
 
+ALTER TABLE hmda_user.institutions2019 ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE hmda_user.institutions2019 OWNER TO hmda_user;
+
+
 
 --
 -- TOC entry 5447 (class 2606 OID 60872)

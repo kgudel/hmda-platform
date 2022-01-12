@@ -3,10 +3,11 @@ package hmda.parser.derivedFields
 import hmda.model.filing.lar.LoanApplicationRegister
 import hmda.model.filing.lar.enums._
 import hmda.model.census.CountyLoanLimit
-
+import hmda.census.records.OverallLoanLimit
+// $COVERAGE-OFF$
 case class LoanLimitInfo(
   totalUnits: Int,
-  amount: Double,
+  amount: BigDecimal,
   lienStatus: LienStatusEnum,
   county: String,
   state: String
@@ -26,6 +27,7 @@ case class StateBoundries(
 object ConformingLoanLimit {
 
   def assignLoanLimit(lar: LoanApplicationRegister,
+                      overallLoanLimit: OverallLoanLimit,
                       countyLoanLimitsByCounty: Map[String, CountyLoanLimit],
                       countyLoanLimitsByState: Map[String, StateBoundries]): String = {
     val loan = LoanLimitInfo(
@@ -38,37 +40,37 @@ object ConformingLoanLimit {
 
     val conformingLoanLimit = {
       if (loan.totalUnits > 4) "NA"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount <= 453100.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount <= overallLoanLimit.oneUnitMin)
         "C"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount <= 580150.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount <= overallLoanLimit.twoUnitMin)
         "C"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount <= 701250.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount <= overallLoanLimit.threeUnitMin)
         "C"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount <= 871450.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount <= overallLoanLimit.fourUnitMin)
         "C"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount > 721150.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount > overallLoanLimit.oneUnitMax)
         "NC"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount > 923050.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount > overallLoanLimit.twoUnitMax)
         "NC"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount > 1115800.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount > overallLoanLimit.threeUnitMax)
         "NC"
-      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount > 1386650.00)
+      else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount > overallLoanLimit.fourUnitMax)
         "NC"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount <= 226550.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount <= overallLoanLimit.oneUnitMin / 2.0)
         "C"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount <= 290075.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount <= overallLoanLimit.twoUnitMin / 2.0)
         "C"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount <= 350625.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount <= overallLoanLimit.threeUnitMin / 2.0)
         "C"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount <= 435725.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount <= overallLoanLimit.fourUnitMin / 2.0)
         "C"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount > 360575.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount > overallLoanLimit.oneUnitMax / 2.0)
         "NC"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount > 461525.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount > overallLoanLimit.twoUnitMax / 2.0)
         "NC"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount > 557900.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount > overallLoanLimit.threeUnitMax / 2.0)
         "NC"
-      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount > 693325.00)
+      else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount > overallLoanLimit.fourUnitMax / 2.0)
         "NC"
       else "U"
     }
@@ -115,37 +117,37 @@ object ConformingLoanLimit {
     } else if (conformingLoanLimit == "U" && loan.state != "NA") {
       countyLoanLimitsByState.get(loan.state) match {
         case Some(state) => {
-          if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount <= state.oneUnitMax)
+          if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount <= state.oneUnitMin)
             "C"
-          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount > state.oneUnitMin)
+          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 1 && loan.amount > state.oneUnitMax)
             "NC"
-          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount <= state.twoUnitMax)
+          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount <= state.twoUnitMin)
             "C"
-          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount > state.twoUnitMin)
+          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 2 && loan.amount > state.twoUnitMax)
             "NC"
-          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount <= state.threeUnitMax)
+          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount <= state.threeUnitMin)
             "C"
-          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount > state.threeUnitMin)
+          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 3 && loan.amount > state.threeUnitMax)
             "NC"
-          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount <= state.fourUnitMax)
+          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount <= state.fourUnitMin)
             "C"
-          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount > state.fourUnitMin)
+          else if (loan.lienStatus == SecuredByFirstLien && loan.totalUnits == 4 && loan.amount > state.fourUnitMax)
             "NC"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount <= (state.oneUnitMax / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount <= (state.oneUnitMin / 2.0))
             "C"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount > (state.oneUnitMin / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 1 && loan.amount > (state.oneUnitMax / 2.0))
             "NC"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount <= (state.twoUnitMax / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount <= (state.twoUnitMin / 2.0))
             "C"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount > (state.twoUnitMin / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 2 && loan.amount > (state.twoUnitMax / 2.0))
             "NC"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount <= (state.threeUnitMax / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount <= (state.threeUnitMin / 2.0))
             "C"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount > (state.threeUnitMin / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 3 && loan.amount > (state.threeUnitMax / 2.0))
             "NC"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount <= (state.fourUnitMax / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount <= (state.fourUnitMin / 2.0))
             "C"
-          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount > (state.fourUnitMin / 2.0))
+          else if (loan.lienStatus == SecuredBySubordinateLien && loan.totalUnits == 4 && loan.amount > (state.fourUnitMax / 2.0))
             "NC"
           else "U"
         }
@@ -158,3 +160,4 @@ object ConformingLoanLimit {
 
   }
 }
+// $COVERAGE-ON$

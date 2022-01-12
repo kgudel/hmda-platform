@@ -1,4 +1,4 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "email-service.fullname" . }}
@@ -29,6 +29,12 @@ spec:
           volumeMounts:
             - name: tz-config
               mountPath: /etc/localtime          
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL         
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: JDBC_URL

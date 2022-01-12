@@ -1,8 +1,9 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "irs-publisher.fullname" . }}
   annotations:
+    reloader.stakater.com/search: "true"
     downscaler/uptime: Mon-Fri 10:00-23:00 UTC
   labels:
     app: {{ include "irs-publisher.name" . }}
@@ -24,6 +25,12 @@ spec:
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL            
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
             limits:

@@ -1,16 +1,24 @@
 package hmda.census.records
 
-import com.typesafe.config.ConfigFactory
 import hmda.model.ResourceUtils._
 import hmda.model.census.CountyLoanLimit
+import hmda.parser.derivedFields.StateBoundries
+
+case class OverallLoanLimit(
+  oneUnitMin: Double,
+  twoUnitMin: Double,
+  threeUnitMin: Double,
+  fourUnitMin: Double,
+  oneUnitMax: Double,
+  twoUnitMax: Double,
+  threeUnitMax: Double,
+  fourUnitMax: Double
+)
 
 object CountyLoanLimitRecords {
 
-  def parseCountyLoanLimitFile(): List[CountyLoanLimit] = {
-    val config = ConfigFactory.load()
-    val countyLoanLimitFileName =
-      config.getString("hmda.countyLoanLimit.fields.filename")
-    val lines = fileLines(s"/$countyLoanLimitFileName")
+  def parseCountyLoanLimitFile(fileName: String): List[CountyLoanLimit] = {
+    val lines = fileLines(s"/$fileName")
     lines
       .drop(1)
       .map { s =>
@@ -29,4 +37,47 @@ object CountyLoanLimitRecords {
       }
       .toList
   }
+
+  def countyLoansLimitByCounty(countyLoanLimits: Seq[CountyLoanLimit]): Map[String, CountyLoanLimit] = {
+    countyLoanLimits
+      .map(county => county.stateCode + county.countyCode -> county)
+      .toMap
+  }
+
+  def countyLoansLimitByState(countyLoanLimits: Seq[CountyLoanLimit]): Map[String, StateBoundries] = {
+    countyLoanLimits.groupBy(county => county.stateAbbrv).mapValues { countyList =>
+      val oneUnit   = countyList.map(county => county.oneUnitLimit)
+      val twoUnit   = countyList.map(county => county.twoUnitLimit)
+      val threeUnit = countyList.map(county => county.threeUnitLimit)
+      val fourUnit  = countyList.map(county => county.fourUnitLimit)
+      StateBoundries(
+        oneUnitMax = oneUnit.max,
+        oneUnitMin = oneUnit.min,
+        twoUnitMax = twoUnit.max,
+        twoUnitMin = twoUnit.min,
+        threeUnitMax = threeUnit.max,
+        threeUnitMin = threeUnit.min,
+        fourUnitMax = fourUnit.max,
+        fourUnitMin = fourUnit.min
+      )
+    }
+  }
+
+  def overallLoanLimits(countyLoanLimits: Seq[CountyLoanLimit]): OverallLoanLimit = {
+    val oneUnit   = countyLoanLimits.map(county => county.oneUnitLimit)
+    val twoUnit   = countyLoanLimits.map(county => county.twoUnitLimit)
+    val threeUnit = countyLoanLimits.map(county => county.threeUnitLimit)
+    val fourUnit  = countyLoanLimits.map(county => county.fourUnitLimit)
+    OverallLoanLimit(
+      oneUnitMin = oneUnit.min,
+      twoUnitMin = twoUnit.min,
+      threeUnitMin = threeUnit.min,
+      fourUnitMin = fourUnit.min,
+      oneUnitMax = oneUnit.max,
+      twoUnitMax = twoUnit.max,
+      threeUnitMax = threeUnit.max,
+      fourUnitMax = fourUnit.max,
+    )
+  }
+
 }

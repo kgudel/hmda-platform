@@ -57,14 +57,14 @@ trait TransmittalSheetComponent {
         createdAt,
         isQuarterly,
         signDate
-      ) <> (TransmittalSheetEntity.tupled, TransmittalSheetEntity.unapply)
+      ) <> ((TransmittalSheetEntity.apply _).tupled, TransmittalSheetEntity.unapply)
   }
 
   //only used for setup (testing) - TransmittalSheetSetup
   val transmittalSheetTable = TableQuery[TransmittalSheetTable]((tag: Tag) => new TransmittalSheetTable(tag, "transmittalsheet2019"))
 
   class TransmittalSheetRepository(val config: DatabaseConfig[JdbcProfile], val tableName: String)
-      extends TableRepository[TransmittalSheetTable, String] {
+    extends TableRepository[TransmittalSheetTable, String] {
 
     def getTableQuery(tableName: String) =
       TableQuery[TransmittalSheetTable]((tag: Tag) => new TransmittalSheetTable(tag, tableName))
@@ -88,7 +88,7 @@ trait TransmittalSheetComponent {
       db.run(table.filter(_.lei.toUpperCase === lei.toUpperCase).delete)
 
     def deleteByLeiAndQuarter(lei: String): Future[Int] =
-      db.run(table.filter(x => x.lei.toUpperCase === lei.toUpperCase && x.isQuarterly == true).delete)
+      db.run(table.filter(x => x.lei.toUpperCase === lei.toUpperCase && x.isQuarterly === true).delete)
 
     def updateByLei(ts: TransmittalSheetEntity): Future[Int] =
       db.run(table.insertOrUpdate(ts))

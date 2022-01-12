@@ -1,77 +1,39 @@
 package hmda.dataBrowser.api
 
-import akka.event.LoggingAdapter
 import akka.http.scaladsl.model.ContentTypes._
-import akka.http.scaladsl.model.{ HttpEntity, StatusCodes, Uri }
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.{HttpEntity, StatusCodes, Uri}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.directives.RouteDirectives.complete
-import akka.stream.ActorMaterializer
+import akka.stream.Materializer
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
-import hmda.dataBrowser.Settings
 import hmda.dataBrowser.api.DataBrowserDirectives._
 import hmda.dataBrowser.models.HealthCheckStatus.Up
 import hmda.dataBrowser.models._
-import hmda.dataBrowser.repositories._
 import hmda.dataBrowser.services._
-import io.lettuce.core.api.async.RedisAsyncCommands
-import io.lettuce.core.{ ClientOptions, RedisClient }
-import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
-import slick.basic.DatabaseConfig
-import slick.jdbc.JdbcProfile
+import org.slf4j.Logger
 
-import scala.util.{ Failure, Success }
+import scala.util.{Failure, Success}
 
-trait DataBrowserHttpApi extends Settings {
+object DataBrowserHttpApi {
+  def create(log: Logger, fileCache: S3FileService, query: QueryService, healthCheck: HealthCheckService)(
+    implicit mat: Materializer
+  ): Route =
+    new DataBrowserHttpApi(log, fileCache, query, healthCheck).dataBrowserRoutes
+}
+
+private class DataBrowserHttpApi(log: Logger, fileCache: S3FileService, query: QueryService, healthCheck: HealthCheckService) {
 
   val Csv          = "csv"
   val Pipe         = "pipe"
   val Aggregations = "aggregations"
-  val log: LoggingAdapter
-  implicit val materializer: ActorMaterializer
 
-  val databaseConfig = DatabaseConfig.forConfig[JdbcProfile]("databrowser_db")
-  val repository =
-    new PostgresModifiedLarRepository(database.tableName, databaseConfig)
-
-  // We make the creation of the Redis client effectful because it can fail and we would like to operate
-  // the service even if the cache is down (we provide fallbacks in case we receive connection errors)
-  val redisClientTask: Task[RedisAsyncCommands[String, String]] = {
-    val client = RedisClient.create(redis.url)
-    Task.eval {
-      client.setOptions(
-        ClientOptions
-          .builder()
-          .autoReconnect(true)
-          .disconnectedBehavior(ClientOptions.DisconnectedBehavior.REJECT_COMMANDS)
-          .cancelCommandsOnReconnectFailure(true)
-          .build()
-      )
-
-      client
-        .connect()
-        .async()
-    }.memoizeOnSuccess
-    // we memoizeOnSuccess because if we manage to create the client, we do not want to recompute it because the
-    // client creation process is expensive and the client is able to recover internally when Redis comes back
-  }
-
-  val cache =
-    new RedisCache(redisClientTask, redis.ttl)
-
-  val query: QueryService =
-    new DataBrowserQueryService(repository, cache)
-
-  val fileCache = new S3FileService
-
-  val healthCheck: HealthCheckService =
-    new HealthCheckService(repository, cache, fileCache)
-
-  def serveData(queries: List[QueryField], delimiter: Delimiter, errorMessage: String): Route =
-    onComplete(obtainDataSource(fileCache, query)(queries, delimiter).runToFuture) {
+  def serveData(queries: QueryFields, delimiter: Delimiter, errorMessage: String, year: String): Route =
+    onComplete(obtainDataSource(fileCache, query)(queries, delimiter, year).runToFuture) {
       case Failure(ex) =>
-        log.error(ex, errorMessage)
+        log.error(errorMessage, ex)
         complete(StatusCodes.InternalServerError)
 
       case Success(Left(byteSource)) =>
@@ -92,90 +54,115 @@ trait DataBrowserHttpApi extends Settings {
             complete(
               query
                 .fetchAggregate(countFields)
-                .map(aggs => AggregationResponse(Parameters.fromBrowserFields(countFields), aggs))
+                .map { case (from, aggs) => AggregationResponse(Parameters.fromBrowserFields(countFields.queryFields), aggs, from) }
                 .runToFuture
             )
           }
         } ~
           pathPrefix("nationwide") {
-            extractFieldsForRawQueries { queryFields =>
-              // GET /view/nationwide/csv
-              (path(Csv) & get) {
-                extractNationwideMandatoryYears { mandatoryFields =>
+            // GET /view/nationwide/csv
+            (path(Csv) & get) {
+              extractNationwideMandatoryYears { mandatoryFields =>
+                extractFieldsForRawQueries(mandatoryFields.year) { queryFields =>
                   //remove filters that have all options selected
-                  val allFields = (queryFields ++ mandatoryFields).filterNot { eachQueryField =>
-                    eachQueryField.isAllSelected
-                  }
+                  val allFields = QueryFields(mandatoryFields.year, (queryFields.queryFields ++ mandatoryFields.queryFields).filterNot {
+                    eachQueryField => eachQueryField.isAllSelected
+                  })
                   log.info("Nationwide [CSV]: " + allFields)
-                  contentDispositionHeader(allFields, Commas) {
-                    serveData(allFields, Commas, s"Failed to perform nationwide CSV query with the following queries: $allFields")
+                  contentDispositionHeader(allFields.queryFields, Commas) {
+                    serveData(
+                      allFields,
+                      Commas,
+                      s"Failed to perform nationwide CSV match with the following queries: $allFields",
+                      allFields.year
+                    )
                   }
                 }
-              } ~
-                // GET /view/nationwide/pipe
-                (path(Pipe) & get) {
-                  extractNationwideMandatoryYears { mandatoryFields =>
-                    //remove filters that have all options selected
-                    val allFields = (queryFields ++ mandatoryFields).filterNot { eachQueryField =>
-                      eachQueryField.isAllSelected
-                    }
-                    log.info("Nationwide [Pipe]: " + allFields)
-                    contentDispositionHeader(allFields, Pipes) {
-                      serveData(allFields, Pipes, s"Failed to perform nationwide PSV query with the following queries: $allFields")
-                    }
-                  }
-
-                }
+              }
             } ~
+              // GET /view/nationwide/pipe
+              (path(Pipe) & get) {
+                extractNationwideMandatoryYears { mandatoryFields =>
+                  extractFieldsForRawQueries(mandatoryFields.year) { queryFields =>
+                    //remove filters that have all options selected
+                    val allFields = QueryFields(mandatoryFields.year, (queryFields.queryFields ++ mandatoryFields.queryFields).filterNot {
+                      eachQueryField => eachQueryField.isAllSelected
+                    })
+                    log.info("Nationwide [Pipe]: " + allFields)
+                    contentDispositionHeader(allFields.queryFields, Pipes) {
+                      serveData(
+                        allFields,
+                        Pipes,
+                        s"Failed to perform nationwide PSV query with the following queries: $allFields",
+                        allFields.year
+                      )
+                    }
+                  }
+                }
+
+              } ~
               // GET /view/nationwide/aggregations
               (path(Aggregations) & get) {
-                extractFieldsForAggregation { queryFields =>
-                  val allFields = queryFields
-                  log.info("Nationwide [Aggregations]: " + allFields)
-                  complete(
-                    query
-                      .fetchAggregate(allFields)
-                      .map(aggs => AggregationResponse(Parameters.fromBrowserFields(allFields), aggs))
-                      .runToFuture
-                  )
+                extractNationwideMandatoryYears { mandatoryFields =>
+                  extractFieldsForAggregation(mandatoryFields.year) { queryFields =>
+                    val allFields = queryFields
+                    log.info("Nationwide [Aggregations]: " + allFields)
+                    complete(
+                      query
+                        .fetchAggregate(allFields)
+                        .map { case (from, aggs) => AggregationResponse(Parameters.fromBrowserFields(allFields.queryFields), aggs, from) }
+                        .runToFuture
+                    )
+                  }
                 }
               }
           } ~
           // GET /view/aggregations
           (path(Aggregations) & get) {
-            extractYearsAndMsaAndStateAndCountyAndLEIBrowserFields { mandatoryFields =>
-              extractFieldsForAggregation { remainingQueryFields =>
-                val allFields = mandatoryFields ++ remainingQueryFields
-                log.info("Aggregations: " + allFields)
-                complete(
-                  query
-                    .fetchAggregate(allFields)
-                    .map(aggs => AggregationResponse(Parameters.fromBrowserFields(allFields), aggs))
-                    .runToFuture
-                )
+              extractMsaAndStateAndCountyAndInstitutionIdentifierBrowserFields { mandatoryFields =>
+                log.info("Aggregations: " + mandatoryFields)
+                extractFieldsForAggregation(mandatoryFields.year) { remainingQueryFields =>
+                  val allFields = QueryFields(mandatoryFields.year, mandatoryFields.queryFields ++ remainingQueryFields.queryFields)
+
+                  complete(
+                    query
+                      .fetchAggregate(allFields)
+                      .map { case (from, aggs) => AggregationResponse(Parameters.fromBrowserFields(allFields.queryFields), aggs, from) }
+                      .runToFuture
+                  )
+                }
               }
-            }
-          } ~
+            } ~
           // GET /view/csv
           (path(Csv) & get) {
-            extractYearsAndMsaAndStateAndCountyAndLEIBrowserFields { mandatoryFields =>
-              extractFieldsForRawQueries { remainingQueryFields =>
-                val allFields = mandatoryFields ++ remainingQueryFields
+            extractMsaAndStateAndCountyAndInstitutionIdentifierBrowserFields { mandatoryFields =>
+              extractFieldsForRawQueries(mandatoryFields.year) { remainingQueryFields =>
+                val allFields = QueryFields(mandatoryFields.year, mandatoryFields.queryFields ++ remainingQueryFields.queryFields)
                 log.info("CSV: " + allFields)
-                contentDispositionHeader(allFields, Commas) {
-                  serveData(allFields, Commas, s"Failed to fetch data for /view/csv with the following queries: $allFields")
+                contentDispositionHeader(allFields.queryFields, Commas) {
+                  serveData(
+                    allFields,
+                    Commas,
+                    s"Failed to fetch data for /view/csv with the following queries: ${allFields.queryFields}",
+                    allFields.year
+                  )
                 }
               }
             }
           } ~
           // GET /view/pipe
           (path(Pipe) & get) {
-            extractYearsAndMsaAndStateAndCountyAndLEIBrowserFields { mandatoryFields =>
-              extractFieldsForRawQueries { remainingQueryFields =>
-                val allFields = mandatoryFields ++ remainingQueryFields
+            extractMsaAndStateAndCountyAndInstitutionIdentifierBrowserFields { mandatoryFields =>
+              extractFieldsForRawQueries(mandatoryFields.year) { remainingQueryFields =>
+                val allFields = QueryFields(mandatoryFields.year, mandatoryFields.queryFields ++ remainingQueryFields.queryFields)
                 log.info("PIPE: " + allFields)
-                contentDispositionHeader(allFields, Pipes) {
-                  serveData(allFields, Pipes, s"Failed to fetch data for /view/pipe with the following queries: $allFields")
+                contentDispositionHeader(allFields.queryFields, Pipes) {
+                  serveData(
+                    allFields,
+                    Pipes,
+                    s"Failed to fetch data for /view/pipe with the following queries: ${allFields.queryFields}",
+                    allFields.year
+                  )
                 }
               }
             }
@@ -187,13 +174,25 @@ trait DataBrowserHttpApi extends Settings {
           (path("filers") & get) {
             extractYearsMsaMdsStatesAndCounties { filerFields =>
               log.info("Filers: " + filerFields)
-              onComplete(query.fetchFilers(filerFields).runToFuture) {
-                case Failure(ex) =>
-                  log.error(ex, "Failed to obtain filer information")
-                  complete(StatusCodes.InternalServerError)
+              filerFields.year match {
+                case "2017" =>
+                  onComplete(query.fetchFilers2017(filerFields).runToFuture) {
+                    case Failure(ex) =>
+                      log.error("Failed to obtain filer information", ex)
+                      complete(StatusCodes.InternalServerError)
 
-                case Success(filerResponse) =>
-                  complete(StatusCodes.OK, filerResponse)
+                    case Success(filerResponse @ (from, response2017)) =>
+                      complete((StatusCodes.OK, FilerInstitutionHttpResponse2017(response2017.institutions, from)))
+                  }
+                case _ =>
+                  onComplete(query.fetchFilers(filerFields).runToFuture) {
+                    case Failure(ex) =>
+                      log.error("Failed to obtain filer information", ex)
+                      complete(StatusCodes.InternalServerError)
+
+                    case Success(filerResponse @ (from, latest)) =>
+                      complete((StatusCodes.OK, FilerInstitutionHttpResponseLatest(latest.institutions, from)))
+                  }
               }
             }
           }
@@ -204,11 +203,11 @@ trait DataBrowserHttpApi extends Settings {
               complete(StatusCodes.OK)
 
             case Success(hs) =>
-              log.warning(s"Service degraded cache=${hs.cache} db=${hs.db} s3=${hs.s3}")
+              log.warn(s"Service degraded cache=${hs.cache} db=${hs.db} s3=${hs.s3}")
               complete(StatusCodes.ServiceUnavailable)
 
             case Failure(ex) =>
-              log.error(ex, "Failed to perform a health check")
+              log.error("Failed to perform a health check", ex)
               complete(StatusCodes.InternalServerError)
           }
         }

@@ -2,11 +2,12 @@ package hmda.dataBrowser
 
 import java.math.BigInteger
 import java.security.MessageDigest
+import com.typesafe.config.{ Config, ConfigFactory }
+import hmda.dataBrowser.models.ModifiedLarTable
 
-import com.typesafe.config.{Config, ConfigFactory}
-
+import java.net.URLEncoder
 import scala.concurrent.duration._
-
+// $COVERAGE-OFF$
 trait Settings {
   private val config: Config = ConfigFactory.load()
 
@@ -23,27 +24,60 @@ trait Settings {
     hashedString
   }
   object server {
-    val host: String = config.getString("server.bindings.address")
-    val port: Int = config.getInt("server.bindings.port")
+    val host: String               = config.getString("server.bindings.address")
+    val port: Int                  = config.getInt("server.bindings.port")
     val askTimeout: FiniteDuration = getDuration("server.ask-timeout")
   }
 
   object database {
-    val tableName: String = config.getString("dbconfig.table")
+    val tableName2020: String = config.getString("dbconfig.table.2020")
+    val tableName2019: String = config.getString("dbconfig.table.2019")
+    val tableName2018: String = config.getString("dbconfig.table.2018")
+    val tableName2017: String = config.getString("dbconfig.table.2017")
+
+    // note that 2017 is a special case as the data does not have the same format as 2018+
+    def tableSelector(year: Int): ModifiedLarTable = {
+      val selected = year match {
+        case 2018 => tableName2018
+        case 2019 => tableName2019
+        case 2020 => tableName2020
+        case _    => tableName2020
+      }
+      ModifiedLarTable(selected)
+    }
   }
 
   object redis {
     private val host: String = config.getString("redis.hostname")
-    private val port: Int = config.getInt("redis.port")
-    val url = s"redis://$host:$port"
-    val ttl: FiniteDuration = getDuration("redis.ttl")
+    private val port: Int    = config.getInt("redis.port")
+    private val protocol: String = config.getString("redis.protocol")
+    private val password: String = config.getString("redis.password")
+    val url: String = getUrl
+    val ttl: FiniteDuration  = getDuration("redis.ttl")
+    private def getUrl: String = {
+      if (password.nonEmpty) {
+        val encodedPw = URLEncoder.encode(password, "UTF-8")
+        s"$protocol://${encodedPw}@$host:$port"
+      } else {
+        s"$protocol://$host:$port"
+      }
+    }
   }
 
   object s3 {
     val environment: String = config.getString("server.s3.environment")
-    val bucket: String = config.getString("server.s3.public-bucket")
-    val url: String = config.getString("server.s3.url")
-    val filteredQueries: String =
-      config.getString("server.s3.routes.filtered-queries")
+    val bucket: String      = config.getString("server.s3.public-bucket")
+    val url: String         = config.getString("server.s3.url")
+    def tableSelector(year: Int): String = {
+      val selected = year match {
+        case 2017 => config.getString("server.s3.routes.filtered-queries.2017")
+        case 2018 => config.getString("server.s3.routes.filtered-queries.2018")
+        case 2019 => config.getString("server.s3.routes.filtered-queries.2019")
+        case 2020 => config.getString("server.s3.routes.filtered-queries.2020")
+        case _ => config.getString("server.s3.routes.filtered-queries.2020")
+      }
+      selected
+    }
   }
 }
+// $COVERAGE-OFF$

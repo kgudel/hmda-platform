@@ -1,9 +1,10 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "modified-lar.fullname" . }}
   annotations:
     downscaler/uptime: Mon-Fri 10:00-23:00 UTC
+    reloader.stakater.com/search: "true"
   labels:
     app: {{ include "modified-lar.name" . }}
     chart: {{ include "modified-lar.chart" . }}
@@ -31,6 +32,12 @@ spec:
           volumeMounts:
             - name: tz-config
               mountPath: /etc/localtime
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL             
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:
             limits:
@@ -140,6 +147,11 @@ spec:
                 configMapKeyRef:
                   name: mlar-options-configmap
                   key: generateMlarS3File
+            - name: IS_REGENERATE_MLAR
+              valueFrom:
+                configMapKeyRef:
+                  name: mlar-options-configmap
+                  key: regenerateMlarData
             - name: IS_CREATE_DISPOSITION_KAFKA_RECORD
               valueFrom:
                 configMapKeyRef:

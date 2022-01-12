@@ -22,6 +22,27 @@ trait LarParser {
       case Failure(_) => parserValidationError.invalidNel
     }
 
+  def validateNAOrExemptOrStringValue(str: String): Boolean = {
+    val naCode: String = "NA"
+    val exemptCode: String = "Exempt"
+    str match {
+      case value if (value.equalsIgnoreCase( naCode) || value.equalsIgnoreCase( exemptCode )) =>{
+        if (value.equalsIgnoreCase(naCode) || value.equalsIgnoreCase(exemptCode) ) {
+          true
+        } else {
+          false
+        }
+      }
+      case _ => true
+    }
+  }
+
+  def validateBigDecimalField(value: String, parserValidationError: ParserValidationError): LarParserValidationResult[BigDecimal] =
+    Try(BigDecimal(value)) match {
+      case Success(i) => i.validNel
+      case Failure(_) => parserValidationError.invalidNel
+    }
+
   def validateStrNoSpace(value: String, parserValidationError: ParserValidationError): LarParserValidationResult[String] =
     if (value.contains(" ") || value.contains("|") || value.contains(","))
       parserValidationError.invalidNel
@@ -81,7 +102,13 @@ trait LarParser {
 
 
   def validateStr(str: String): LarParserValidationResult[String] =
-    str.validNel
+      str.validNel
+
+  def validateStrOrNAOrExemptField(str: String, parserValidationError: ParserValidationError): LarParserValidationResult[String] =
+    if (validateNAOrExemptOrStringValue(str))
+      str.validNel
+    else
+      parserValidationError.invalidNel
 
   def validateLarCode[A](larCodeEnum: LarCodeEnum[A],
                          value: String,

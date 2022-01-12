@@ -1,6 +1,6 @@
 package hmda.dataBrowser.repositories
 
-import hmda.dataBrowser.models.{ FilerInstitutionResponse, QueryField, Statistic }
+import hmda.dataBrowser.models.{ FilerInstitutionResponse2017, FilerInstitutionResponseLatest, QueryField, QueryFields, Statistic }
 import io.lettuce.core.api.async.RedisAsyncCommands
 import monix.eval.Task
 
@@ -9,10 +9,13 @@ import io.circe.parser._
 import io.circe.syntax._
 import cats.implicits._
 import io.circe.{ Decoder, Encoder }
+import org.slf4j.Logger
 
 import scala.concurrent.duration.FiniteDuration
 
-class RedisCache(redisClient: Task[RedisAsyncCommands[String, String]], timeToLive: FiniteDuration) extends Cache {
+// $COVERAGE-OFF$
+// Talks to Redis via Redis4Cats
+class RedisModifiedLarAggregateCache(redisClient: Task[RedisAsyncCommands[String, String]], logger: Logger, timeToLive: FiniteDuration) extends Cache {
   private val Prefix = "AGG"
 
   private def findAndParse[A: Decoder](key: String): Task[Option[A]] =
@@ -37,38 +40,61 @@ class RedisCache(redisClient: Task[RedisAsyncCommands[String, String]], timeToLi
         .map(_ => ())
     }.onErrorFallbackTo(Task.unit)
 
-  private def key(queryFields: List[QueryField]): String = {
+  private def key(queryFields: List[QueryField], year: Int): String = {
+    // The year was originally a query field but it was split up later, we do this to preserve backwards compatibility
+    val yearQuery = QueryField(name = "year", year.toString :: Nil, dbName = "filing_year")
     // ensure we get a stable sorting order so we form keys correctly in Redis
-    val sortedQueryFields = queryFields.sortBy(_.name)
+    val sortedQueryFields = (yearQuery :: queryFields).sortBy(_.name)
     val redisKey = sortedQueryFields
       .map(field => s"${field.name}:${field.values.mkString("|")}")
       .mkString(":")
+
     s"$Prefix:$redisKey"
   }
 
-  override def find(queryFields: List[QueryField]): Task[Option[Statistic]] = {
-    val redisKey = key(queryFields)
+  override def find(queryFields: List[QueryField], year: Int): Task[Option[Statistic]] = {
+    val redisKey = key(queryFields, year)
+    logger.info("Redis Key: " + redisKey)
     findAndParse[Statistic](redisKey)
   }
 
-  override def findFilers(filerFields: List[QueryField]): Task[Option[FilerInstitutionResponse]] = {
-    val redisKey = key(filerFields)
-    findAndParse[FilerInstitutionResponse](redisKey)
+  override def findFilers2017(filerFields: List[QueryField], year: Int): Task[Option[FilerInstitutionResponse2017]] = {
+    val redisKey = key(filerFields, year)
+    println(redisKey)
+    findAndParse[FilerInstitutionResponse2017](redisKey)
   }
 
-  override def update(queryFields: List[QueryField], statistic: Statistic): Task[Statistic] = {
-    val redisKey = key(queryFields)
+  override def findFilers2018(filerFields: List[QueryField], year: Int): Task[Option[FilerInstitutionResponseLatest]] = {
+    val redisKey = key(filerFields, year)
+    println(redisKey)
+    findAndParse[FilerInstitutionResponseLatest](redisKey)
+  }
+
+  override def update(queryFields: List[QueryField], year: Int, statistic: Statistic): Task[Statistic] = {
+    val redisKey = key(queryFields, year)
     updateAndSetTTL(redisKey, statistic)
   }
 
-  override def updateFilers(queryFields: List[QueryField], filerInstitutionResponse: FilerInstitutionResponse): Task[FilerInstitutionResponse] = {
-    val redisKey = key(queryFields)
-    updateAndSetTTL(redisKey.toString, filerInstitutionResponse)
+  override def updateFilers2017(
+    queryFields: List[QueryField],
+    year: Int,
+    filerInstitutionResponse: FilerInstitutionResponse2017
+  ): Task[FilerInstitutionResponse2017] = {
+    val redisKey = key(queryFields, year)
+    updateAndSetTTL(redisKey, filerInstitutionResponse)
   }
 
+  override def updateFilers2018(
+    queryFields: List[QueryField],
+    year: Int,
+    filerInstitutionResponse: FilerInstitutionResponseLatest
+  ): Task[FilerInstitutionResponseLatest] = {
+    val redisKey = key(queryFields, year)
+    updateAndSetTTL(redisKey, filerInstitutionResponse)
+  }
 
-  override def invalidate(queryFields: List[QueryField]): Task[Unit] = {
-    val redisKey = key(queryFields)
+  override def invalidate(queryFields: List[QueryField], year: Int): Task[Unit] = {
+    val redisKey = key(queryFields, year)
     invalidateKey(redisKey)
   }
 
@@ -77,3 +103,4 @@ class RedisCache(redisClient: Task[RedisAsyncCommands[String, String]], timeToLi
       .flatMap(client => Task.deferFuture(client.ping().toScala))
       .void
 }
+// $COVERAGE-ON$

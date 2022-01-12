@@ -1,7 +1,10 @@
 package hmda.query.repository
 
+import java.security.MessageDigest
+
 import hmda.model.filing.submission.SubmissionId
 import hmda.model.modifiedlar.EnrichedModifiedLoanApplicationRegister
+import hmda.util.conversion.LarStringFormatter
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 
@@ -17,7 +20,9 @@ class ModifiedLarRepository(databaseConfig: DatabaseConfig[JdbcProfile]) {
     year match {
       case 2018 => "modifiedlar2018"
       case 2019 => "modifiedlar2019"
-      case _    => "modifiedlar2019"
+      case 2020 => "modifiedlar2020"
+      case 2021 => "modifiedlar2021"
+      case _    => "modifiedlar2021"
     }
 
   /**
@@ -27,8 +32,8 @@ class ModifiedLarRepository(databaseConfig: DatabaseConfig[JdbcProfile]) {
     */
   def msaMds(lei: String, filingYear: Int): Future[Vector[(String, String)]] =
     db.run {
-      sql"""SELECT DISTINCT msa_md, msa_md_name
-                         FROM #${fetchYearTable(filingYear)} WHERE lei = ${lei.toUpperCase} AND filing_year = ${filingYear} AND msa_md <> 0"""
+      sql"""SELECT  msa_md, case when msa_md = '99999' then 'NA' else max(msa_md_name) end
+                         FROM #${fetchYearTable(filingYear)} WHERE lei = ${lei.toUpperCase}  AND msa_md <> 0 group by msa_md order by msa_md"""
         .as[(String, String)]
     }
 
@@ -59,6 +64,7 @@ class ModifiedLarRepository(databaseConfig: DatabaseConfig[JdbcProfile]) {
             occupancy_type,
             loan_amount,
             action_taken_type,
+            action_taken_date,
             state,
             county,
             tract,
@@ -154,7 +160,9 @@ class ModifiedLarRepository(databaseConfig: DatabaseConfig[JdbcProfile]) {
             sex_categorization,
             percent_median_msa_income,
             dwelling_category,
-            loan_product_type
+            loan_product_type,
+            uli,
+            checksum
             )
 
 
@@ -168,6 +176,7 @@ class ModifiedLarRepository(databaseConfig: DatabaseConfig[JdbcProfile]) {
             ${input.mlar.occupancy},
             ${input.mlar.loanAmount},
             ${input.mlar.actionTakenType},
+            ${input.mlar.actionTakenDate},
             ${input.mlar.state},
             ${input.mlar.county},
             ${input.mlar.tract},
@@ -263,15 +272,23 @@ class ModifiedLarRepository(databaseConfig: DatabaseConfig[JdbcProfile]) {
             ${input.mlar.sexCategorization},
             ${incomeCategorization(input.mlar.income, input.census.medianIncome)},
             ${input.mlar.dwellingCategorization},
-            ${input.mlar.loanProductTypeCategorization}
+            ${input.mlar.loanProductTypeCategorization},
+            ${input.mlar.uli},
+            ${checksum_calc(input)}
           )
           """)
+
+  private def checksum_calc(input: EnrichedModifiedLoanApplicationRegister): String =
+    MessageDigest.getInstance("MD5")
+      .digest(LarStringFormatter.larString(input).toUpperCase().getBytes())
+      .map(0xFF & _)
+      .map { "%02x".format(_) }.foldLeft(""){_ + _}
 
   private def safeConvertToInt(s: String): Option[Int] =
     Try(s.toInt).toOption
 
   private def incomeCategorization(larIncome: String, censusMedianIncome: Int): String =
-    if (larIncome == "NA")
+    if (larIncome == "NA" ||larIncome == "")
       "NA"
     else {
       //income in the lar is rounded to 1000

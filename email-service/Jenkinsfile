@@ -1,78 +1,42 @@
-import groovy.json.JsonSlurper
+pipeline {
+  agent {
+    label 'hmdaops'
+  }
 
-@NonCPS
-def slurper(def json) {
-    def jsonSlurper = new JsonSlurper()
-    def object = jsonSlurper.parseText(json)
-
-    def deploy = object.deploy.email_service
-}
-
-podTemplate(label: 'buildSbtPod', containers: [
-  containerTemplate(name: 'sbt', image: 'jenkinsxio/builder-scala', ttyEnabled: true, command: 'cat'),
-  containerTemplate(name: 'docker', image: 'docker', ttyEnabled: true, command: 'cat'),
-  containerTemplate(name: 'helm', image: 'alpine/helm', ttyEnabled: true, command: 'cat')
-],
-volumes: [
-  hostPathVolume(mountPath: '/var/run/docker.sock', hostPath: '/var/run/docker.sock'),
-]) {
-   node('buildSbtPod') {
-    def repo = checkout scm
-    def gitBranch = repo.GIT_BRANCH
-    def commitId = sh(returnStdout: true, script: 'git rev-parse HEAD')
-    def gitCommit = repo.GIT_COMMIT
-    def shortCommit = repo.GIT_COMMIT[0..7]
-    def isDeployPR = sh(returnStdout: true, script: "git log -1").contains("[deploy pr]")
-    def gitTagged = env.TAG_NAME != null
-
-    def fileContent = sh(returnStdout: true, script: "echo \$(cat ./jenkins/env.json)")
-    def deploy = slurper(fileContent)
-
-    if (gitBranch == "master") {
-      env.DOCKER_TAG = "latest"
-    } else if (gitTagged) {
-      env.DOCKER_TAG = env.TAG_NAME
-    } else {
-      env.DOCKER_TAG = env.BRANCH_NAME
+  stages {
+    stage('init') {
+      steps {
+        script {
+          init.setEnvironment('email_service')
+          init.checkForChanges('email-service')
+        }
+      }
     }
 
-    println "DOCKER_TAG: ${env.DOCKER_TAG}, TAG_NAME: ${env.TAG_NAME}, gitbranch: ${gitBranch}, isDeployPR: ${isDeployPR}"
-    
-    sh "git remote add upstream https://github.com/cfpb/hmda-platform.git"
-    sh "git fetch upstream master"
-
-    //Get list of changed files and end job if files changed aren't in relevant folders
-    folders=[]
-    def output = sh(returnStdout: true, script: "echo \$(git --no-pager diff upstream/master --name-only)").split().each{folders = folders + it.split('/')[0]}
-    if (!(gitBranch == 'master' || folders.contains('email-service') || folders.contains('common') || gitTagged)) {
-        currentBuild.result = 'SUCCESS'
-        return
-    } 
-
     stage('Build Scala Code and Generate Dockerfile') {
-      container('sbt') {
-        sh "sbt -batch email-service/docker:stage"
+      agent {
+        docker {
+          image 'hmda/sbt'
+          reuseNode true
+        }
+      }
+      steps {
+        sh """find . -name target -type d -prune -exec rm -rf {} \\;"""
+        sh """find . -name test -type d -prune -exec rm -rf {} \\;"""
+        sh "sbt -Dsbt.global.base=.sbt -Dsbt.boot.directory=.sbt -Dsbt.ivy.home=.ivy2 -batch clean email-service/docker:stage"
+        sh "rm -rf data"
       }
     }
 
     stage('Build And Publish Docker Image') {
-      container('docker') {
-        withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'dockerhub',
-          usernameVariable: 'DOCKER_HUB_USER', passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
-          withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'hmda-platform-jenkins-service',
-            usernameVariable: 'DTR_USER', passwordVariable: 'DTR_PASSWORD']]) {
-            withCredentials([string(credentialsId: 'internal-docker-registry', variable: 'DOCKER_REGISTRY_URL')]){
-              sh "docker build --rm -t=${env.DOCKER_HUB_USER}/email-service email-service/target/docker/stage"
-              if (gitTagged || gitBranch == "master" || isDeployPR) {
-                sh """
-                  docker tag ${env.DOCKER_HUB_USER}/email-service ${env.DOCKER_HUB_USER}/email-service:${env.DOCKER_TAG}
-                  docker login -u ${env.DOCKER_HUB_USER} -p ${env.DOCKER_HUB_PASSWORD}
-                  docker push ${env.DOCKER_HUB_USER}/email-service:${env.DOCKER_TAG}
-                  docker tag ${env.DOCKER_HUB_USER}/email-service:${env.DOCKER_TAG} ${DOCKER_REGISTRY_URL}/${env.DOCKER_HUB_USER}/email-service:${env.DOCKER_TAG}
-                  docker login ${DOCKER_REGISTRY_URL} -u ${env.DTR_USER} -p ${env.DTR_PASSWORD}
-                  docker push ${DOCKER_REGISTRY_URL}/${env.DOCKER_HUB_USER}/email-service:${env.DOCKER_TAG}
-                """
-              }
+      steps {
+        script {
+          withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'dockerhub',
+            usernameVariable: 'DOCKER_HUB_USER', passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
+            withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: 'dtr-ext-jenkins-service',
+              usernameVariable: 'DTR_USER', passwordVariable: 'DTR_PASSWORD']]) {
+                dockerBuild.sbtBuild('email-service')
+                scanImage('hmda/email-service', env.DOCKER_TAG)
             }
           }
         }
@@ -80,32 +44,31 @@ volumes: [
     }
 
     stage('Deploy') {
-      if ((env.BRANCH_NAME == 'master' || isDeployPR) && deploy) {
-        container('helm') {
-          dir("kubernetes/email-service") {
-            sh """
-              helm upgrade --install --force --namespace=default \
-              --values=kubernetes/email-service/values-dev.yaml \
-              --set image.tag=${env.DOCKER_TAG} \
-              --set image.pullPolicy=Always \
-              email-service \
-              kubernetes/email-service
-            """
+      agent {
+        docker {
+          image 'hmda/helm:2.16.6'
+          reuseNode true
+          args '--entrypoint=\'\''
+        }
+      }
+      steps {
+        script {
+          withCredentials([file(credentialsId: 'hmda-ops-kubeconfig', variable: 'KUBECONFIG')]) {
+            if (env.DOCKER_PUSH == 'true') {
+              helm.deploy('email-service')
+            }
           }
         }
       }
     }
 
     stage('Docker Clean Up') {
-      container('docker') {
-        sh """
-          docker images
-          docker image prune -f
-          docker images
-          docker ps -a
-        """
+      steps {
+        script {
+          dockerBuild.clean()
+        }
       }
-    } 
-
+    }
   }
+
 }

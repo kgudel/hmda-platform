@@ -29,6 +29,7 @@
             <script src="${script}" type="text/javascript"></script>
         </#list>
     </#if>
+    <script src="${url.resourcesCommonPath}/node_modules/jquery/dist/jquery.min.js" type="text/javascript"></script>
     <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -56,7 +57,7 @@
       <div class="usa-logo" id="logo">
         <em class="usa-logo-text">
           <a class="usa-nav-link" href="${properties.filingAppUrl!}">
-              <img src="/static/media/ffiec-logo.69ef8d9f.svg" height="32px" alt="FFIEC"/>HMDA Filing Platform
+              <img src="${url.resourcesPath}/img/ffiec-logo.svg" height="32px" alt="FFIEC"/>HMDA Filing Platform
           </a>
         </em>
       </div>
@@ -130,7 +131,7 @@
           <ul class="usa-unstyled-list">
             <li class="usa-footer-primary-content">
               <a class="usa-nav-link" href="${properties.filingAppUrl!}">
-                <img src="/static/media/ffiec-logo.69ef8d9f.svg" height="21px" alt="FFIEC"/>Home Mortgage Disclosure Act
+                <img src="${url.resourcesPath}/img/ffiec-logo.svg" height="21px" alt="FFIEC"/>Home Mortgage Disclosure Act
               </a>
             </li>
           </ul>

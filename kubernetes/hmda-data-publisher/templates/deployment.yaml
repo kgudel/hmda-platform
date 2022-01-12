@@ -1,8 +1,10 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "hmda-data-publisher.fullname" . }}
   labels:
+  annotations:
+    reloader.stakater.com/search: "true"
     app: {{ template "hmda-data-publisher.name" . }}
     chart: {{ template "hmda-data-publisher.chart" . }}
     release: {{ .Release.Name }}
@@ -29,6 +31,12 @@ spec:
           volumeMounts:
             - name: tz-config
               mountPath: /etc/localtime
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
           - name: CASSANDRA_CLUSTER_HOSTS
@@ -126,16 +134,61 @@ spec:
               configMapKeyRef:
                 name: schedule-configmap
                 key: publisher.ts.private.2019
+          - name: TS_PRIVATE_SCHEDULE_2020
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.ts.private.2020
+          - name: TS_PRIVATE_SCHEDULE_2021
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.ts.private.2021
           - name: LAR_PRIVATE_SCHEDULE_2019
             valueFrom:
               configMapKeyRef:
                 name: schedule-configmap
                 key: publisher.lar.private.2019
+          - name: LAR_PRIVATE_SCHEDULE_2020
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.private.2020
+          - name: LAR_PRIVATE_SCHEDULE_2021
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.private.2021
+          - name: LAR_PRIVATE_SCHEDULE_LOAN_LIMIT_2019
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.private.cll.2019
+          - name: LAR_PRIVATE_SCHEDULE_LOAN_LIMIT_2020
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.private.cll.2020
+          - name: LAR_PRIVATE_SCHEDULE_LOAN_LIMIT_2021
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.private.cll.2021
           - name: PANEL_PRIVATE_SCHEDULE_2019
             valueFrom:
               configMapKeyRef:
                 name: schedule-configmap
                 key: publisher.panel.private.2019
+          - name: PANEL_PRIVATE_SCHEDULE_2020
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.panel.private.2020
+          - name: PANEL_PRIVATE_SCHEDULE_2021
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.panel.private.2021
           - name: TS_PUBLIC_SCHEDULE_2018
             valueFrom:
               configMapKeyRef:
@@ -146,11 +199,36 @@ spec:
               configMapKeyRef:
                 name: schedule-configmap
                 key: publisher.lar.public.2018
+          - name: TS_PUBLIC_SCHEDULE_2019
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.ts.public.2019
+          - name: TS_PUBLIC_SCHEDULE_2020
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.ts.public.2020
+          - name: LAR_PUBLIC_SCHEDULE_2019
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.public.2019
+          - name: LAR_PUBLIC_SCHEDULE_2020
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.public.2020
           - name: PANEL_PUBLIC_SCHEDULE_2018
             valueFrom:
               configMapKeyRef:
                 name: schedule-configmap
-                key: publisher.panel.public.2018
+                key: publisher.ts.public.2019
+          - name: LAR_PUBLIC_SCHEDULE_2019
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.public.2019
           - name: LAR_Scheduler_Quarterly_2020
             valueFrom:
               configMapKeyRef:
@@ -161,6 +239,111 @@ spec:
               configMapKeyRef:
                 name: schedule-configmap
                 key: publisher.ts.quarterly.2020
+          - name: LAR_Scheduler_Quarterly_2021
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.quarterly.2021
+          - name: TS_Scheduler_Quarterly_2021
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.ts.quarterly.2021
+          - name: LAR_Scheduler_Quarterly_2022
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.lar.quarterly.2022
+          - name: TS_Scheduler_Quarterly_2022
+            valueFrom:
+              configMapKeyRef:
+                name: schedule-configmap
+                key: publisher.ts.quarterly.2022
+          - name: LAR_2018_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.larTableName2018
+          - name: MODIFIED_LAR_2018_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.mlarTableName2018
+          - name: PANEL_2019_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.panelTableName2018
+          - name: TS_2018_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.tsTableName2018
+          - name: LAR_2019_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.larTableName2019
+          - name: MODIFIED_LAR_2019_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.mlarTableName2019
+          - name: PANEL_2019_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.panelTableName2019
+          - name: TS_2019_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.tsTableName2019
+          - name: LAR_2020_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.larTableName2020
+          - name: LAR_2020_Q1_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.larTableName2020Q1
+          - name: LAR_2020_Q2_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.larTableName2020Q2
+          - name: LAR_2020_Q3_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.larTableName2020Q3
+          - name: MODIFIED_LAR_2020_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.mlarTableName2020
+          - name: PANEL_2020_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.panelTableName2020
+          - name: TS_2020_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.tsTableName2020
+          - name: EMAIL_TABLE
+            valueFrom:
+              configMapKeyRef:
+                name: data-publisher-pgtables-configmap
+                key: publishertable.emailTable
+          - name: VALIDATION_REPORTING_URL
+            valueFrom:
+              configMapKeyRef:
+                name: webhook-configmap
+                key: mattermost.hmda
           resources:
 {{ toYaml .Values.resources | indent 12 }}
     {{- with .Values.nodeSelector }}

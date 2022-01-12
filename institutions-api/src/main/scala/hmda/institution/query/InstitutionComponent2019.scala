@@ -22,12 +22,16 @@ trait InstitutionComponent2019 {
     def respondentCity  = column[String]("respondent_city")
     def parentIdRssd    = column[Int]("parent_id_rssd")
     def parentName      = column[String]("parent_name")
-    def assets          = column[Int]("assets")
+    def assets          = column[Long]("assets")
     def otherLenderCode = column[Int]("other_lender_code")
     def topHolderIdRssd = column[Int]("topholder_id_rssd")
     def topHolderName   = column[String]("topholder_name")
     def hmdaFiler       = column[Boolean]("hmda_filer")
     def quarterlyFiler  = column[Boolean]("quarterly_filer")
+    def quarterlyFilerHasFiledQ1  = column[Boolean]("quarterly_filer_has_filed_q1")
+    def quarterlyFilerHasFiledQ2  = column[Boolean]("quarterly_filer_has_filed_q2")
+    def quarterlyFilerHasFiledQ3  = column[Boolean]("quarterly_filer_has_filed_q3")
+    def notes                     = column[String]("notes")
 
     def * =
       (
@@ -48,7 +52,11 @@ trait InstitutionComponent2019 {
         topHolderIdRssd,
         topHolderName,
         hmdaFiler,
-        quarterlyFiler
+        quarterlyFiler,
+        quarterlyFilerHasFiledQ1,
+        quarterlyFilerHasFiledQ2,
+        quarterlyFilerHasFiledQ3,
+        notes
       ) <> (InstitutionEntity.tupled, InstitutionEntity.unapply)
   }
 

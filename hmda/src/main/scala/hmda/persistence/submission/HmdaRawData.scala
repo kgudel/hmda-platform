@@ -1,14 +1,15 @@
 package hmda.persistence.submission
 
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior, TypedActorContext}
+import akka.actor.typed.scaladsl.{ActorContext, Behaviors}
+import akka.actor.typed.{ActorRef, Behavior}
 import akka.cluster.sharding.typed.ShardingEnvelope
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.EventSourcedBehavior.CommandHandler
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior, RetentionCriteria}
-import hmda.messages.submission.HmdaRawDataCommands.{AddLine, HmdaRawDataCommand, StopRawData}
+import hmda.messages.submission.HmdaRawDataCommands.{AddLines, HmdaRawDataCommand, StopRawData}
 import hmda.messages.submission.HmdaRawDataEvents.{HmdaRawDataEvent, LineAdded}
+import hmda.messages.submission.HmdaRawDataReplies.LinesAdded
 import hmda.model.filing.submission.SubmissionId
 import hmda.model.processing.state.HmdaRawDataState
 import hmda.persistence.HmdaTypedPersistentActor
@@ -20,7 +21,7 @@ object HmdaRawData extends HmdaTypedPersistentActor[HmdaRawDataCommand, HmdaRawD
   override def behavior(entityId: String): Behavior[HmdaRawDataCommand] =
     Behaviors.setup { ctx =>
       EventSourcedBehavior[HmdaRawDataCommand, HmdaRawDataEvent, HmdaRawDataState](
-        persistenceId = PersistenceId(entityId),
+        persistenceId = PersistenceId.ofUniqueId(entityId),
         emptyState = HmdaRawDataState(),
         commandHandler = commandHandler(ctx),
         eventHandler = eventHandler
@@ -28,17 +29,16 @@ object HmdaRawData extends HmdaTypedPersistentActor[HmdaRawDataCommand, HmdaRawD
     }
 
   override def commandHandler(
-                               ctx: TypedActorContext[HmdaRawDataCommand]
+                               ctx: ActorContext[HmdaRawDataCommand]
                              ): CommandHandler[HmdaRawDataCommand, HmdaRawDataEvent, HmdaRawDataState] = { (_, cmd) =>
-    val log = ctx.asScala.log
+    val log = ctx.log
     cmd match {
-      case AddLine(_, timestamp, data, maybeReplyTo) =>
-        val evt = LineAdded(timestamp, data)
-        Effect.persist(evt).thenRun { _ =>
+      case AddLines(_, timestamp, data, maybeReplyTo) =>
+        val evts = data.map(LineAdded(timestamp, _)).toList
+        Effect.persist(evts).thenRun { _ =>
           log.debug(s"Persisted: $data")
           maybeReplyTo match {
-            case Some(replyTo) =>
-              replyTo ! evt
+            case Some(replyTo) => replyTo ! LinesAdded(evts)
             case None => //Do Nothing
           }
         }

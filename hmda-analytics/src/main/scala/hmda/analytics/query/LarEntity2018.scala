@@ -10,7 +10,7 @@ case class LarEntity2018(
     preapproval: Int = 0,
     constructionMethod: Int = 0,
     occupancyType: Int = 0,
-    loanAmount: Double = 0.0,
+    loanAmount: BigDecimal = 0.0,
     actionTakenType: Int = 0,
     actionTakenDate: Int = 0,
     street: String = "",
@@ -110,7 +110,8 @@ case class LarEntity2018(
     otherAusResult: String = "",
     reverseMortgage: Int = 0,
     lineOfCredits: Int = 0,
-    businessOrCommercial: Int = 0
-) {
+    businessOrCommercial: Int = 0,
+    checksum: String
+                        ) {
   def isEmpty: Boolean = lei == ""
 }

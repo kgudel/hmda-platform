@@ -34,6 +34,7 @@ SET default_with_oids = false;
 
 CREATE TABLE hmda_user.modifiedlar2019 (
     id integer NOT NULL,
+    uniq_id integer NOT NULL,
     lei character varying NOT NULL,
     loan_type integer,
     loan_purpose integer,
@@ -132,7 +133,7 @@ CREATE TABLE hmda_user.modifiedlar2019 (
     conforming_loan_limit character varying,
     median_age integer,
     median_age_calculated character varying,
-    median_income_percentage integer,
+    median_income_percentage decimal,
     race_categorization character varying,
     sex_categorization character varying,
     ethnicity_categorization character varying,
@@ -192,6 +193,11 @@ ALTER TABLE ONLY hmda_user.modifiedlar2019
 --
 
 CREATE INDEX modifiedlar2019_lei_idx ON hmda_user.modifiedlar2019 USING btree (lei);
+
+alter table hmda_user.modifiedlar2019
+add column uli character varying;
+
+alter table hmda_user.modifiedlar2019 add column checksum varchar;
 
 
 -- Completed on 2019-06-05 11:44:50 EDT

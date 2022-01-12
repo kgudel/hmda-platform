@@ -2,12 +2,15 @@ package hmda.dataBrowser.repositories
 
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import hmda.dataBrowser.models.{ FilerInformation, ModifiedLarEntity, QueryField, Statistic }
+import hmda.dataBrowser.models.{ FilerInformationLatest, ModifiedLarEntity, ModifiedLarTable, QueryField, Statistic }
 import monix.eval.Task
 import slick.basic.DatabaseConfig
 import slick.jdbc.{ JdbcProfile, ResultSetConcurrency, ResultSetType }
 
-class PostgresModifiedLarRepository(tableName: String, config: DatabaseConfig[JdbcProfile]) extends ModifiedLarRepository {
+// $COVERAGE-OFF$
+// Talks to Postgres using Slick
+class PostgresModifiedLarRepository(config: DatabaseConfig[JdbcProfile], tableSelector: Int => ModifiedLarTable)
+    extends ModifiedLarRepositoryLatest {
 
   import config._
   import config.profile.api._
@@ -131,15 +134,13 @@ class PostgresModifiedLarRepository(tableName: String, config: DatabaseConfig[Jd
     else {
       val secondaries =
         remainingExpressions
-          //do not include year in the WHERE clause because all entries in the table (modifiedlar2018_snapshot) have filing_year = 2018
-          .filterNot(_ == "filing_year IN ('2018')")
           .map(expr => s"AND $expr")
           .mkString(sep = " ")
       s"$primary $secondaries"
     }
   }
 
-  override def find(browserFields: List[QueryField]): Source[ModifiedLarEntity, NotUsed] = {
+  override def find(browserFields: List[QueryField], year: Int): Source[ModifiedLarEntity, NotUsed] = {
     val queries = browserFields.map(field => in(field.dbName, field.values))
 
     val filterCriteria = queries match {
@@ -149,7 +150,7 @@ class PostgresModifiedLarRepository(tableName: String, config: DatabaseConfig[Jd
 
     val searchQuery = sql"""
       SELECT #${columns}
-      FROM #${tableName}
+      FROM #${tableSelector(year).name}
       #$filterCriteria
       """
       .as[ModifiedLarEntity]
@@ -164,12 +165,14 @@ class PostgresModifiedLarRepository(tableName: String, config: DatabaseConfig[Jd
     Source.fromPublisher(publisher)
   }
 
-  override def findFilers(filerFields: List[QueryField]): Task[Seq[FilerInformation]] = {
-    val year = filerFields.find(_.name == "year").map(_.values.head.toInt)
-    val institutionsTableName = year match { //will be needed when databrowser has to support multiple years
-      case Some(2018) => "institutions2018"
-      case _ => "institutions2018"
+  override def findFilers(filerFields: List[QueryField], year: Int): Task[Seq[FilerInformationLatest]] = {
+    val institutionsTableName = year match { //will be needed when data browser has to support multiple years
+      case 2018 => "institutions2018_snapshot"
+      case 2019 => "institutions2019_snapshot"
+      case 2020 => "institutions2020_snapshot"
+      case _    => "institutions2020_snapshot"
     }
+
     //do not include year in the WHERE clause because all entries in the table (modifiedlar2018_snapshot) have filing_year = 2018
     val queries = filerFields.filterNot(_.name == "year").map(field => in(field.dbName, field.values))
     val filterCriteria = queries match {
@@ -178,29 +181,31 @@ class PostgresModifiedLarRepository(tableName: String, config: DatabaseConfig[Jd
     }
     val query =
       sql"""
-        SELECT a.lei, b.respondent_name, a.lar_count, '#${year.getOrElse("2018")}'
+        SELECT a.lei, b.respondent_name, a.lar_count, '#$year'
         from (
           SELECT lei, count(*) as lar_count
-          FROM #${tableName}
+          FROM #${tableSelector(year).name}
           #$filterCriteria
           GROUP BY lei
         ) a
           JOIN #${institutionsTableName} b ON a.lei = b.lei
-         """.as[FilerInformation]
+         """.as[FilerInformationLatest]
+
     Task.deferFuture(db.run(query)).guarantee(Task.shift)
   }
 
-  override def findAndAggregate(browserFields: List[QueryField]): Task[Statistic] = {
+  override def findAndAggregate(browserFields: List[QueryField], year: Int): Task[Statistic] = {
     val queries = browserFields.map(field => in(field.dbName, field.values))
     val filterCriteria = queries match {
       case Nil          => ""
       case head :: tail => whereAndOpt(head, tail: _*)
     }
+
     val query = sql"""
         SELECT
           COUNT(loan_amount),
           SUM(loan_amount)
-        FROM #${tableName}
+        FROM #${tableSelector(year).name}
         #$filterCriteria
         """.as[Statistic].head
 
@@ -210,3 +215,4 @@ class PostgresModifiedLarRepository(tableName: String, config: DatabaseConfig[Jd
   def healthCheck: Task[Unit] =
     Task.deferFuture(db.run(sql"SELECT 1".as[Int])).guarantee(Task.shift).void
 }
+// $COVERAGE-ON$

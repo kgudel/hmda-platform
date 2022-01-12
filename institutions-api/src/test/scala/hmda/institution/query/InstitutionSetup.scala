@@ -1,5 +1,6 @@
 package hmda.institution.query
 
+import akka.http.scaladsl.testkit.RouteTestTimeout
 import hmda.institution.query.InstitutionEntityGenerators.institutionEntityGen
 import hmda.query.DbConfiguration.dbConfig
 import slick.dbio.DBIOAction
@@ -15,10 +16,15 @@ trait InstitutionSetup extends InstitutionEmailComponent {
     new InstitutionRepository2019(dbConfig, "institutions2019")
   implicit val institutionRepository2020 =
     new InstitutionRepository2020(dbConfig, "institutions2020")
+  implicit val institutionRepository2021 =
+    new InstitutionRepository2021(dbConfig, "institutions2021")
+  implicit val institutionRepository2022 =
+    new InstitutionRepository2022(dbConfig, "institutions2022")
   implicit val emailRepository = new InstitutionEmailsRepository(dbConfig)
   val db                       = emailRepository.db
 
-  val duration = 5.seconds
+  val duration = 15.seconds
+  implicit val routeTimeout = RouteTestTimeout(3.seconds)
 
   val instA = institutionEntityGen.sample
     .getOrElse(InstitutionEntity())
@@ -44,6 +50,9 @@ trait InstitutionSetup extends InstitutionEmailComponent {
       DBIOAction.seq(
         institutionsTable2018.schema.create,
         institutionsTable2019.schema.create,
+        institutionsTable2020.schema.create,
+        institutionsTable2021.schema.create,
+        institutionsTable2022.schema.create,
         institutionsTable2018 ++= Seq(
           instA,
           instB,
@@ -65,6 +74,10 @@ trait InstitutionSetup extends InstitutionEmailComponent {
     Await.result(emailRepository.dropSchema(), duration)
     Await.result(institutionRepository2018.dropSchema(), duration)
     Await.result(institutionRepository2019.dropSchema(), duration)
+    Await.result(institutionRepository2020.dropSchema(), duration)
+    Await.result(institutionRepository2021.dropSchema(), duration)
+    Await.result(institutionRepository2022.dropSchema(), duration)
+
   }
 
 }

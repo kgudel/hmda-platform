@@ -1,7 +1,7 @@
 init:
   image:
     repository: alpine
-    tag: 3.11.2
+    tag: 3.11.3
     pullPolicy: IfNotPresent
 
 keycloak:
@@ -9,7 +9,7 @@ keycloak:
 
   image:
     repository: jboss/keycloak
-    tag: 8.0.1
+    tag: 11.0.0
     pullPolicy: Always
 
     ## Optionally specify an array of imagePullSecrets.
@@ -32,7 +32,7 @@ keycloak:
   ## Additional init containers, e. g. for providing custom themes
   extraInitContainers: |
     - name: theme-provider
-      image: hmda/theme-provider:latest
+      image: hmda/theme-provider:v2.20.3
       imagePullPolicy: Always
       command:
         - sh

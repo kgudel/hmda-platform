@@ -22,7 +22,7 @@ hmda:
   actorSystemName: hmda2
   runtimeMode: kubernetes
   podNamespace: beta
-  apiNamespace: hmda-api-beta
+  apiNamespace: beta
   serviceNamespace: beta.svc.cluster.local
 
 kafka:
@@ -37,7 +37,7 @@ service:
   type: ClusterIP
   account:
     name: hmda-service-account-beta
-  name: hmda-platform
+  name: hmda-platform-beta
 
 #ambassador:
 #  port: 80

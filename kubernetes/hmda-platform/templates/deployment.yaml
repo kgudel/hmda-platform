@@ -1,6 +1,8 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    reloader.stakater.com/search: "true"
   labels:
     app: {{ template "hmda-platform.name" . }}
   name: {{ template "hmda-platform.fullname" . }}
@@ -37,8 +39,18 @@ spec:
             mountPath: /etc/localtime
         resources:
 {{ toYaml .Values.resources | indent 12 }}
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL              
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         env:
+        - name: PLATFORM_NAMESPACE
+          valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
         - name: CURRENT_YEAR
           valueFrom:
             configMapKeyRef:

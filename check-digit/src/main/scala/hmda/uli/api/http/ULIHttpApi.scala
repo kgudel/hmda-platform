@@ -1,93 +1,89 @@
 package hmda.uli.api.http
 
 import akka.NotUsed
-import akka.actor.ActorSystem
-import akka.event.LoggingAdapter
-import akka.http.scaladsl.common.{
-  EntityStreamingSupport,
-  JsonEntityStreamingSupport
-}
+import akka.http.scaladsl.common.{EntityStreamingSupport, JsonEntityStreamingSupport}
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
-import akka.http.scaladsl.model.{HttpCharsets, HttpEntity, StatusCodes}
-import akka.stream.ActorMaterializer
-import akka.util.{ByteString, Timeout}
-import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model.MediaTypes._
+import akka.http.scaladsl.model.StatusCodes.BadRequest
 import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.model.{HttpCharsets, HttpEntity}
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
 import akka.stream.scaladsl.{Flow, Source}
-import hmda.api.http.directives.HmdaTimeDirectives
-import hmda.uli.api.model.ULIModel._
-import hmda.uli.validation.ULI._
+import akka.util.ByteString
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
-import io.circe.generic.auto._
+import hmda.parser.institution.InstitutionCsvParser.parseBoolean
+import hmda.uli.api.model.ULIModel._
+import hmda.uli.api.model.ULIValidationErrorMessages.{invalidLoanIdLengthMessage, nonAlpanumericLoanIdMessage}
+import hmda.uli.validation.ULI._
 import hmda.util.http.FilingResponseUtils.failedResponse
-
-import scala.concurrent.ExecutionContext
 import hmda.util.streams.FlowUtils._
+import io.circe.generic.auto._
+import org.slf4j.Logger
 
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-import akka.actor.ActorSystem
-import akka.stream.ActorMaterializer
-import akka.http.scaladsl.server.Directives._
-import akka.util.Timeout
-
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
-
-trait ULIHttpApi extends HmdaTimeDirectives {
-  implicit val system: ActorSystem
-  implicit val materializer: ActorMaterializer
-  implicit val ec: ExecutionContext
-  implicit val timeout: Timeout
-  val log: LoggingAdapter
-
-  val uliHttpRoutes =
+object ULIHttpApi {
+  def create(log: Logger): Route = new ULIHttpApi(log).uliHttpRoutes
+}
+private class ULIHttpApi(log: Logger) {
+  val uliHttpRoutes: Route =
     encodeResponse {
       pathPrefix("uli") {
         path("checkDigit") {
           extractUri { uri =>
             entity(as[Loan]) { loan =>
-              val loanId = loan.loanId
+              val loanId     = loan.loanId
               val maybeDigit = Try(checkDigit(loanId))
               maybeDigit match {
                 case Success(digit) =>
                   val uli = ULI(loan.loanId, digit, loan.loanId + digit)
+                  log.info(
+                    "API Check Digit Request: " + maybeDigit.toString + "\n" +
+                      " Check Digit Result: " + digit + "\n" +
+                      " ULI: " + uli.toString
+                  )
                   complete(ToResponseMarshallable(uli))
                 case Failure(error) =>
-                  failedResponse(StatusCodes.BadRequest, uri, error)
+                  log.info(
+                    "API Check Digit Request Failed: " + maybeDigit + "\n" +
+                      " Error: " + error.toString
+                  )
+                  failedResponse(BadRequest, uri, error)
               }
             } ~
               fileUpload("file") {
                 case (_, byteSource) =>
-                  val lStart = ByteString.fromString("{\"loanIds\":[")
+                  val lStart  = ByteString.fromString("{\"loanIds\":[")
                   val lMiddle = ByteString.fromString(",")
-                  val lEnd = ByteString.fromString("]}")
+                  val lEnd    = ByteString.fromString("]}")
                   val withLoanWrapper: Flow[ByteString, ByteString, NotUsed] =
                     Flow[ByteString]
                       .intersperse(lStart, lMiddle, lEnd)
-                  implicit val jsonStreamingSupport
-                    : JsonEntityStreamingSupport =
+                  implicit val jsonStreamingSupport: JsonEntityStreamingSupport =
                     EntityStreamingSupport
                       .json()
                       .withFramingRenderer(withLoanWrapper)
 
                   val checkDigitSource =
                     processLoanIdFile(byteSource)
+
+                  log.info("Check Digit File Request Received.")
+
                   complete(checkDigitSource)
                 case _ =>
-                  complete(ToResponseMarshallable(StatusCodes.BadRequest))
+                  complete(BadRequest)
               }
           }
         } ~
           path("checkDigit" / "csv") {
             toStrictEntity(35.seconds) {
-              timedPost { _ =>
+              post {
                 respondWithHeader(RawHeader("Cache-Control", "no-cache")) {
                   fileUpload("file") {
                     case (_, byteSource) =>
-                      val headerSource = Source.fromIterator(() =>
-                        List("loanId,checkDigit,uli\n").toIterator)
+                      val headerSource = Source.fromIterator(() => List("loanId,checkDigit,uli\n").toIterator)
                       val checkDigit = processLoanIdFile(byteSource)
                         .map(l => l.toCSV)
                         .map(l => l + "\n")
@@ -95,13 +91,13 @@ trait ULIHttpApi extends HmdaTimeDirectives {
 
                       val csv =
                         headerSource.map(s => ByteString(s)).concat(checkDigit)
-                      complete(
-                        HttpEntity.Chunked.fromData(
-                          `text/csv`.toContentType(HttpCharsets.`UTF-8`),
-                          csv))
+
+                      log.info("CSV Check Digit File Request Received.")
+
+                      complete(HttpEntity.Chunked.fromData(`text/csv`.toContentType(HttpCharsets.`UTF-8`), csv))
 
                     case _ =>
-                      complete(ToResponseMarshallable(StatusCodes.BadRequest))
+                      complete(BadRequest)
                   }
                 }
               }
@@ -110,48 +106,57 @@ trait ULIHttpApi extends HmdaTimeDirectives {
           path("validate") {
             extractUri { uri =>
               entity(as[ULICheck]) { uc =>
-                val uli = uc.uli
+                val uli     = uc.uli
                 val isValid = Try(validateULI(uli))
                 isValid match {
                   case Success(value) =>
                     val validated = ULIValidated(value)
+                    log.info(
+                      "API CheckDigit > Validate " + isValid.toString + "\n" +
+                        "Validate Response: " + validated.toString
+                    )
                     complete(ToResponseMarshallable(validated))
                   case Failure(error) =>
-                    failedResponse(StatusCodes.BadRequest, uri, error)
+                    log.info(
+                      "API CheckDigit (Validate) Failed: " + isValid.toString + "\n" +
+                        "Error: " + error.toString
+                    )
+                    failedResponse(BadRequest, uri, error)
                 }
               } ~
                 fileUpload("file") {
                   case (_, byteSource) =>
-                    val uStart = ByteString.fromString("{\"ulis\":[")
+                    val uStart  = ByteString.fromString("{\"ulis\":[")
                     val uMiddle = ByteString.fromString(",")
-                    val uEnd = ByteString.fromString("]}")
+                    val uEnd    = ByteString.fromString("]}")
                     val withUliWrapper: Flow[ByteString, ByteString, NotUsed] =
                       Flow[ByteString]
                         .intersperse(uStart, uMiddle, uEnd)
-                    implicit val jsonStreamingSupport
-                      : JsonEntityStreamingSupport =
+                    implicit val jsonStreamingSupport: JsonEntityStreamingSupport =
                       EntityStreamingSupport
                         .json()
                         .withFramingRenderer(withUliWrapper)
 
                     val validatedStream =
                       processUliFile(byteSource)
+
+                    log.info("Check Digit > Validate File Request Received.")
+
                     complete(validatedStream)
 
                   case _ =>
-                    complete(ToResponseMarshallable(StatusCodes.BadRequest))
+                    complete(BadRequest)
                 }
             }
           } ~
           path("validate" / "csv") {
             toStrictEntity(35.seconds) {
-              timedPost { _ =>
+              post {
                 respondWithHeader(RawHeader("Cache-Control", "no-cache")) {
                   fileUpload("file") {
                     case (_, byteSource) =>
                       val headerSource =
-                        Source.fromIterator(() =>
-                          List("uli,isValid\n").toIterator)
+                        Source.fromIterator(() => List("uli,isValid\n").toIterator)
                       val validated = processUliFile(byteSource)
                         .map(u => u.toCSV)
                         .map(l => l + "\n")
@@ -159,13 +164,13 @@ trait ULIHttpApi extends HmdaTimeDirectives {
 
                       val csv =
                         headerSource.map(s => ByteString(s)).concat(validated)
-                      complete(
-                        HttpEntity.Chunked.fromData(
-                          `text/csv`.toContentType(HttpCharsets.`UTF-8`),
-                          csv))
+
+                      log.info("CSV Check Digit > Validate File Request Received.")
+
+                      complete(HttpEntity.Chunked.fromData(`text/csv`.toContentType(HttpCharsets.`UTF-8`), csv))
 
                     case _ =>
-                      complete(ToResponseMarshallable(StatusCodes.BadRequest))
+                      complete(BadRequest)
                   }
                 }
               }
@@ -174,28 +179,30 @@ trait ULIHttpApi extends HmdaTimeDirectives {
       }
     }
 
-  private def processLoanIdFile(byteSource: Source[ByteString, Any]) = {
+  private def processLoanIdFile(byteSource: Source[ByteString, Any]) =
     byteSource
       .via(framing("\n"))
       .map(_.utf8String)
       .map(_.trim)
-      .filter(loanId => loanIdIsValidLength(loanId))
-      .filter(loanId => isAlphanumeric(loanId))
       .map { loanId =>
-        val digit = checkDigit(loanId)
-        ULI(loanId, digit, loanId + digit)
+        if(!loanIdIsValidLength(loanId)) {
+          ULI(loanId, "Error", invalidLoanIdLengthMessage)
+        }
+        else if(!isAlphanumeric(loanId)) {
+          ULI(loanId, "Error", nonAlpanumericLoanIdMessage)
+        }
+        else  {
+          val digit = checkDigit(loanId)
+          ULI(loanId, digit, loanId + digit)
+        }
       }
-  }
 
-  private def processUliFile(byteSource: Source[ByteString, Any]) = {
+  private def processUliFile(byteSource: Source[ByteString, Any]) =
     byteSource
       .via(framing("\n"))
       .map(_.utf8String)
       .map(_.trim)
-      .filter(uli => uliIsValidLength(uli))
-      .filter(uli => isAlphanumeric(uli))
-      .map(uli => (uli, validateULI(uli)))
+      .map(uli => (uli, validateCheckDigitULI(uli)))
       .map(validated => ULIBatchValidated(validated._1, validated._2))
-  }
 
 }

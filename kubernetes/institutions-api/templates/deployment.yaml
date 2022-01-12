@@ -1,7 +1,9 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "institutions-api.fullname" . }}
+  annotations:
+    reloader.stakater.com/search: "true"
   labels:
     app: {{ template "institutions-api.name" . }}
     chart: {{ template "institutions-api.chart" . }}
@@ -29,6 +31,12 @@ spec:
           volumeMounts:
             - name: tz-config
               mountPath: /etc/localtime
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL            
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: KAFKA_INSTITUTIONS_TOPIC
@@ -40,6 +48,11 @@ spec:
                 configMapKeyRef:
                   name: timed-guards
                   key: currentYear
+            - name: RULES_YEARLY_FILING_YEARS_ALLOWED
+              valueFrom:
+                configMapKeyRef:
+                  name: timed-guards
+                  key: yearsAllowed
             - name: PG_HOST
               valueFrom:
                 secretKeyRef:
@@ -106,14 +119,14 @@ spec:
             - name: {{ .Values.service.name }}
               containerPort: 9092
               protocol: {{ .Values.service.protocol }}
-          livenessProbe:
-            httpGet:
-              path: /
-              port: {{ .Values.service.port }}
-          readinessProbe:
-            httpGet:
-              path: /
-              port: {{ .Values.service.port }}
+#          livenessProbe:
+#            httpGet:
+#              path: /
+#              port: {{ .Values.service.port }}
+#          readinessProbe:
+#            httpGet:
+#              path: /
+#              port: {{ .Values.service.port }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
     {{- with .Values.nodeSelector }}

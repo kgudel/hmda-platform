@@ -2,6 +2,7 @@ package hmda.parser.filing.lar
 
 import hmda.parser.ParserErrorModel._
 
+// $COVERAGE-OFF$
 object LarParserErrorModel {
 
   case class InvalidLei(value: String) extends ParserValidationError {
@@ -229,6 +230,12 @@ object LarParserErrorModel {
     override def inputValue: String = value
   }
 
+  case class InvalidOtherDenial( value: String)
+    extends ParserValidationError {
+    override def fieldName: String = "Other Denial"
+    override def inputValue: String = value
+  }
+
   case class InvalidTotalLoanCosts(value: String)
       extends ParserValidationError {
     override def fieldName: String = "Total Loan Costs"
@@ -383,9 +390,42 @@ object LarParserErrorModel {
   }
 
   case class InvalidBusinessOrCommercial(value: String)
-      extends ParserValidationError {
+    extends ParserValidationError {
     override def fieldName: String = "Buisness or Commercial Purpose"
     override def inputValue: String = value
   }
 
+  case class InvalidStreet(value: String) extends ParserValidationError {
+    override def fieldName: String = "Street Address"
+    override def inputValue: String = value
+  }
+
+  case class InvalidCity(value: String) extends ParserValidationError {
+    override def fieldName: String = "City"
+    override def inputValue: String = value
+  }
+
+  case class InvalidState(value: String) extends ParserValidationError {
+    override def fieldName: String = "State"
+    override def inputValue: String = value
+  }
+
+  case class InvalidZipcode(value: String) extends ParserValidationError {
+    override def fieldName: String = "Zip Code"
+    override def inputValue: String = value
+  }
+
+  case class InvalidCounty(value: String) extends ParserValidationError {
+    override def fieldName: String = "County"
+    override def inputValue: String = value
+  }
+
+  case class InvalidTract(value: String) extends ParserValidationError {
+    override def fieldName: String = "Tract"
+    override def inputValue: String = value
+  }
+
+
+
 }
+// $COVERAGE-ON$

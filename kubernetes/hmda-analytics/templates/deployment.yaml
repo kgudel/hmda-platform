@@ -1,4 +1,4 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "hmda-analytics.fullname" . }}
@@ -28,7 +28,13 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           volumeMounts:
             - name: tz-config
-              mountPath: /etc/localtime          
+              mountPath: /etc/localtime
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL            
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: KAFKA_ANALYTICS_TOPIC

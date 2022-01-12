@@ -12,8 +12,7 @@ sealed trait Agency {
 object Agency {
   val values = List(1, 2, 3, 5, 7, 9, -1)
 
-  def apply(): Agency =
-    UndeterminedAgency
+  def apply(): Agency = CFPB
 
   def valueOf(code: Int): Agency =
     code match {
@@ -23,8 +22,8 @@ object Agency {
       case 5  => NCUA
       case 7  => HUD
       case 9  => CFPB
-      case -1 => UndeterminedAgency
-      case _  => throw new Exception("Invalid Agency Code")
+      case -1 => UnknownAgency
+      case invalidCode =>  throw new Exception("Invalid Agency Code: "+ invalidCode)
     }
 
   implicit val agencyEncoder: Encoder[Agency] = (a: Agency) =>
@@ -82,9 +81,8 @@ case object CFPB extends Agency {
   override val fullName = "Consumer Financial Protection Bureau (CFPB)"
 }
 
-case object UndeterminedAgency extends Agency {
+case object UnknownAgency extends Agency {
   override val code = -1
-
-  override val name     = "undetermined"
-  override val fullName = "Undetermined Agency"
+  override val name     = "unknown"
+  override val fullName = "Unknown Agency"
 }

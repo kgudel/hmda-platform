@@ -1,4 +1,4 @@
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "hmda-dashboard.fullname" . }}
@@ -29,19 +29,17 @@ spec:
           volumeMounts:
             - name: tz-config
               mountPath: /etc/localtime
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL             
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
               containerPort: 9999
               protocol: TCP
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
           env:
             - name: JDBC_URL
               valueFrom:
@@ -53,6 +51,18 @@ spec:
                 configMapKeyRef:
                   name: bank-filter-configmap
                   key: bank-filter-list
+            - name: DASHBOARD_ADMIN_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: dashboard-admin-pass
+                  key: password
+            - name: HMDA_RUNTIME_MODE
+              value: {{ .Values.hmda.runtimeMode }}
+            - name: KEYCLOAK_AUTH_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: http-configmap
+                  key: auth.url
           resources:
 {{ toYaml .Values.resources | indent 12 }}
     {{- with .Values.nodeSelector }}

@@ -12,6 +12,7 @@ CREATE SCHEMA hmda_user AUTHORIZATION hmda_user;
 -- Dumped by pg_dump version 10.5
 
 -- Started on 2019-06-05 11:44:49 EDT
+-- file for 2021
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -34,6 +35,7 @@ SET default_with_oids = false;
 
 CREATE TABLE hmda_user.modifiedlar2018 (
     id integer NOT NULL,
+    uniq_id integer NOT NULL,
     lei character varying NOT NULL,
     loan_type integer,
     loan_purpose integer,
@@ -132,7 +134,7 @@ CREATE TABLE hmda_user.modifiedlar2018 (
     conforming_loan_limit character varying,
     median_age integer,
     median_age_calculated character varying,
-    median_income_percentage integer,
+    median_income_percentage decimal,
     race_categorization character varying,
     sex_categorization character varying,
     ethnicity_categorization character varying,
@@ -194,7 +196,7 @@ ALTER TABLE ONLY hmda_user.modifiedlar2018
 CREATE INDEX modifiedlar2018_lei_idx ON hmda_user.modifiedlar2018 USING btree (lei);
 CREATE INDEX modifiedlar2018_sex_categorization_idx ON hmda_user.modifiedlar2018 USING btree (sex_categorization);
 CREATE INDEX modifiedlar2018_race_categorization_idx ON hmda_user.modifiedlar2018 USING btree (race_categorization);
-CREATE INDEX modifiedlar2018_ethnicity_categorization_idx ON hmda_user.modifiedlar USING btree (ethnicity_categorization);
+CREATE INDEX modifiedlar2018_ethnicity_categorization_idx ON hmda_user.modifiedlar2018 USING btree (ethnicity_categorization);
 CREATE INDEX modifiedlar2018_loan_product_type_idx ON hmda_user.modifiedlar2018 USING btree (loan_product_type);
 CREATE INDEX modifiedlar2018_msa_md_idx ON hmda_user.modifiedlar2018 USING btree (msa_md);
 CREATE INDEX modifiedlar2018_state_idx ON hmda_user.modifiedlar2018 USING btree (state);
@@ -211,6 +213,13 @@ CREATE INDEX modifiedlar2018_state_filing_year_idx ON hmda_user.modifiedlar2018 
 CREATE INDEX modifiedlar2018_total_units_year_idx ON hmda_user.modifiedlar2018 USING btree (total_units);
 CREATE INDEX modifiedlar2018_median_age_year_idx ON hmda_user.modifiedlar2018 USING btree (median_age_calculated);
 
+alter table hmda_user.modifiedlar2018
+add column uli character varying;
+
+alter table hmda_user.modifiedlar2018
+add column action_taken_date integer;
+
+alter table hmda_user.modifiedlar2018 add column checksum varchar;
 
 
 -- Completed on 2019-06-05 11:44:50 EDT

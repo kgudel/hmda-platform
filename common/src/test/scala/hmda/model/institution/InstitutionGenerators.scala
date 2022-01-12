@@ -17,11 +17,16 @@ object InstitutionGenerators {
       email           <- emailListGen
       respondent      <- institutionRespondentGen
       parent          <- institutionParentGen
-      assets          <- Gen.choose(Int.MinValue, Int.MaxValue)
+      assets          <- Gen.choose(Long.MinValue, Long.MaxValue)
       otherLenderCode <- Gen.choose(Int.MinValue, Int.MaxValue)
       topHolder       <- topHolderGen
       hmdaFiler       <- Gen.oneOf(true, false)
       quarterlyFiler  <- Gen.oneOf(true, false)
+      quarterlyFilerHasFiledQ1  <- Gen.oneOf(true, false)
+      quarterlyFilerHasFiledQ2  <- Gen.oneOf(true, false)
+      quarterlyFilerHasFiledQ3  <- Gen.oneOf(true, false)
+      notes                     <- Gen.asciiPrintableStr
+
     } yield {
       Institution(
         activityYear: Int,
@@ -38,12 +43,16 @@ object InstitutionGenerators {
         otherLenderCode,
         topHolder,
         hmdaFiler,
-        quarterlyFiler
+        quarterlyFiler,
+        quarterlyFilerHasFiledQ1,
+        quarterlyFilerHasFiledQ2,
+        quarterlyFilerHasFiledQ3,
+        notes
       )
     }
 
   implicit def agencyCodeGen: Gen[Int] =
-    Gen.oneOf(Agency.values.filter(x => x != -1))
+    Gen.oneOf(Agency.values)
 
   implicit def agencyGen: Gen[Agency] =
     for {
