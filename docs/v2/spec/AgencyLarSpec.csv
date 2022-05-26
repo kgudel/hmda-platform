@@ -1,3 +1,4 @@
+Column Name, Data Field Name, Data Field Type, Data Field Source
 record_id, Record Identifier, Numeric, HMDA Filing Instructions Guide
 lei, Legal Entity Identifier, Alphanumeric, HMDA Filing Instructions Guide
 uli, Universal Loan Identifier (ULI) or Non-Universal Loan Identifier (NULI), Alphanumeric, HMDA Filing Instructions Guide
@@ -11,8 +12,8 @@ loan_amount, Loan Amount, Numeric, HMDA Filing Instructions Guide
 action_type, Action Taken, Numeric, HMDA Filing Instructions Guide
 action_date, Action Taken Date, Numeric, HMDA Filing Instructions Guide
 address, Street Address, Alphanumeric, HMDA Filing Instructions Guide
-city, City, Numeric, HMDA Filing Instructions Guide
-state_code, State, Numeric, HMDA Filing Instructions Guide
+city, City, Alphanumeric, HMDA Filing Instructions Guide
+state_code, State, Alphanumeric, HMDA Filing Instructions Guide
 zip, ZIP Code, Alphanumeric, HMDA Filing Instructions Guide
 county_code, County, Alphanumeric, HMDA Filing Instructions Guide
 census_tract_number, Census Tract, Alphanumeric, HMDA Filing Instructions Guide
@@ -54,7 +55,7 @@ applicant_sex_v, Sex of Applicant or Borrower Collected on the Basis of Visual O
 coapplicant_sex_v, Sex of Co-Applicant or Co-Borrower Collected on the Basis of Visual Observation of Surname, Numeric, HMDA Filing Instructions Guide
 applicant_age, Age of Applicant or Borrower, Numeric, HMDA Filing Instructions Guide
 coapplicant_age, Age of Co-Applicant or Co-Borrower, Numeric, HMDA Filing Instructions Guide
-applicant_income, Income, Numeric, HMDA Filing Instructions Guide
+applicant_income, Income, Alphanumeric, HMDA Filing Instructions Guide
 purchaser_type, Type of Purchaser, Numeric, HMDA Filing Instructions Guide
 rate_spread, Rate Spread, Alphanumeric, HMDA Filing Instructions Guide
 hoepa_status, HOEPA Status, Numeric, HMDA Filing Instructions Guide
@@ -89,7 +90,7 @@ property_value, Property Value, Alphanumeric, HMDA Filing Instructions Guide
 manufacturedhome_secured_property_type, Manufacture Home Secured Property Type, Numeric, HMDA Filing Instructions Guide
 manufacturedhome_land_property_interest, Manufactured Home Land Property Type, Numeric, HMDA Filing Instructions Guide
 total_units_interest, Total Units, Numeric, HMDA Filing Instructions Guide
-multifamily_affordable_units, Multifamilty Affordable Units, Alphanumeric, HMDA Filing Instructions Guide
+multifamily_affordable_units, Multifamily Affordable Units, Alphanumeric, HMDA Filing Instructions Guide
 submission_of_application, Submission of Application, Numeric, HMDA Filing Instructions Guide
 initially_payable, Initially Payable to Your Institution, Numeric, HMDA Filing Instructions Guide
 nmlsr_identifier, Mortgage Loan Originator NMLSR Identifier, Alphanumeric, HMDA Filing Instructions Guide
