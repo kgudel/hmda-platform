@@ -1,7 +1,10 @@
 package hmda.messages.submission
 
-import hmda.messages.submission.HmdaRawDataEvents.LineAdded
+import hmda.model.filing.submission.SubmissionId
 
 object HmdaRawDataReplies {
-  case class LinesAdded(lines: List[LineAdded])
+
+  case class LinesAdded(submissionId: SubmissionId)
+  case class LinesAddedFailed(submissionId: SubmissionId)
+
 }

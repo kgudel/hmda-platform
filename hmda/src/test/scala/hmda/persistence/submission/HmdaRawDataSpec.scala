@@ -7,7 +7,7 @@ import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.typed.{Cluster, Join}
 import hmda.messages.submission.HmdaRawDataCommands.AddLines
 import hmda.messages.submission.HmdaRawDataEvents.LineAdded
-import hmda.messages.submission.HmdaRawDataReplies.LinesAdded
+import hmda.messages.submission.LinesAdded
 import hmda.model.filing.submission.SubmissionId
 import hmda.persistence.AkkaCassandraPersistenceSpec
 import hmda.utils.YearUtils.Period
@@ -35,7 +35,7 @@ class HmdaRawDataSpec extends AkkaCassandraPersistenceSpec {
 
       hmdaRawData ! AddLines(submissionId, timestamp, List("data1", "data2"), Some(hmdaRawProbe.ref))
 
-      hmdaRawProbe.expectMessage(LinesAdded(List(LineAdded(timestamp, "data1"), LineAdded(timestamp, "data2"))))
+      hmdaRawProbe.expectMessage(LinesAdded())
     }
   }
 
