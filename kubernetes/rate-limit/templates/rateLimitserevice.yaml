@@ -1,0 +1,10 @@
+apiVersion: getambassador.io/v3alpha1
+kind: RateLimitService
+metadata:
+  name: ratelimit
+  namespace: default
+spec:
+  service: "ratelimit-example.default:60080"
+  protocol_version: v3
+  domain: emissary
+  failure_mode_deny: true

@@ -126,6 +126,21 @@ spec:
             configMapKeyRef:
               name: timed-guards
               key: actionQ3End
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: aws-access-key-id
+        - name: AWS_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: s3-configmap
+              key: aws-environment
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: aws-secret-access-key
         - name: KAFKA_INSTITUTIONS_TOPIC
           value: {{.Values.kafka.institutionsTopic}}
         - name: KAFKA_SIGN_TOPIC
