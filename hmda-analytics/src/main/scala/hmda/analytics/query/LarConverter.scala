@@ -43,7 +43,7 @@ object LarConverter {
     config.getString("hmda.countyLoanLimit.2022.fields.filename")
 
   val countyLoanLimitFileName2023 =
-    config.getString("hmda.countyLoanLimit.2023.fields.filename")
+    config.getString("hmda.countyLoanLimit.2023.fields.filenameCombined")
   
   val countyLoanLimits2018: Seq[CountyLoanLimit] =
     parseCountyLoanLimitFile(countyLoanLimitFileName2018)
