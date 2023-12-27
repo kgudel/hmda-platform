@@ -50,7 +50,7 @@ private[engine] object LarEngine2023 extends ValidationEngine[LoanApplicationReg
     V623,
     V624,
     V625_1,
-    V625_2.withIndexedTracts(CensusRecords.indexedTract2023),
+    V625_2.withIndexedTracts(CensusRecords.indexedTract2023CTCombined),
     V626.withIndexedCounties(CensusRecords.indexedCounty2023CTCombined),
     V627.withIndexedCounties(CensusRecords.indexedCounty2023CTCombined),
     V628_1,
