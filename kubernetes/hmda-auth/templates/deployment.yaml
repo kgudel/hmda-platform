@@ -21,10 +21,64 @@ spec:
         app: {{ template "hmda-auth.name" . }}
         release: {{ .Release.Name }}
     spec:
+      initContainers:
+      - args:
+        - apk upgrade --update-cache --available && apk add openssl &&
+          openssl pkcs12 -export -in /opt/docker/certs/redis-cert/redis-crt -inkey /opt/docker/certs/redis-key/redis-key
+          -out /opt/docker/server.p12 -name redis-tls -CAfile /opt/docker/certs/ca-cert/ca-crt -caname root
+          -passin pass:changeit -passout pass:changeit &&
+          keytool -importkeystore -deststorepass changeit -destkeypass changeit -destkeystore /opt/java/openjdk/lib/security/cacerts
+          -srckeystore /opt/docker/server.p12 -srcstoretype PKCS12 -srcstorepass changeit -alias redis-tls &&
+          keytool -v -list -storepass changeit -keystore /opt/java/openjdk/lib/security/cacerts 2>/dev/null | grep redis &&
+          cp /opt/java/openjdk/lib/security/* /opt/docker/temporary/ 
+        command:
+          - /bin/sh
+          - -c
+          - --
+        image: eclipse-temurin:20-jdk-alpine
+        name: eclipse-temurin-init
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+          - mountPath: /opt/docker/temporary
+            name: jksfolder
+          - mountPath: /opt/docker/certs/ca-cert
+            name: ca-cert
+            readOnly: true
+          - mountPath: /opt/docker/certs/redis-cert
+            name: redis-cert
+            readOnly: true
+          - mountPath: /opt/docker/certs/redis-key
+            name: redis-key
+            readOnly: true
       volumes:
         - name: tz-config
           hostPath:
             path: /usr/share/zoneinfo/America/New_York
+        - emptyDir: {}
+          name: jksfolder
+        - name: ca-cert
+          secret:
+            defaultMode: 420
+            items:
+              - key: ca.crt
+                path: ca-crt
+            secretName: redis-tls-secret
+        - name: redis-cert
+          secret:
+            defaultMode: 420
+            items:
+              - key: redis.crt
+                path: redis-crt
+            secretName: redis-tls-secret
+        - name: redis-key
+          secret:
+            defaultMode: 420
+            items:
+              - key: redis.key
+                path: redis-key
+            secretName: redis-tls-secret
       # serviceAccountName: {{ .Values.service.serviceAccount }}
       containers:
         - name: {{ .Chart.Name }}
