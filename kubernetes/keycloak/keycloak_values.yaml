@@ -1,7 +1,7 @@
 image:
   registry: docker.io
   repository: bitnami/keycloak
-  tag: 25.0.2
+  tag: 26.0.5
 
 auth:
   adminUser: keycloak
@@ -66,6 +66,12 @@ initContainers:
     volumeMounts:
       - name: spi
         mountPath: /spi
+
+extraEnvVars:
+  - name: KC_PROXY
+    value: reencrypt
+  - name: KC_HOSTNAME_STRICT
+    value: 'true'
 
 postgresql:
   enabled: false
